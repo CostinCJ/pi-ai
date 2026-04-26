@@ -4,6 +4,8 @@ from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, fil
 import db_helpers
 import brain
 import reflection
+import consolidation
+import regex_facts
 import weather_sync
 import spotify_sync
 import schedule as uni_schedule
@@ -26,6 +28,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ai_reply = "brain hiccup, try again in a sec"
     db_helpers.log_message('ai', ai_reply)
     await update.message.reply_text(ai_reply)
+
+    for fact in regex_facts.extract_facts(user_msg):
+        with db_helpers.get_conn() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO user_facts (fact_key, fact_value, source, confidence) VALUES (?,?,?,?)",
+                (fact["key"], fact["value"], fact["source"], fact["confidence"])
+            )
 
 async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     weather = weather_sync.get_current_weather()
