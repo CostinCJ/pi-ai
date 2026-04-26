@@ -17,3 +17,9 @@ def test_generate_reply_never_returns_three_dots(fake_db):
         reply = brain.generate_reply("how are you")
     assert reply != "..."
     assert reply.strip() != ""
+
+
+def test_generate_reply_passes_through_good_output(fake_db):
+    with patch("brain.chat_with_retry", return_value=("yeah, going where?", True)):
+        reply = brain.generate_reply("yeah i m going out")
+    assert reply == "yeah, going where?"

@@ -1,10 +1,11 @@
 from datetime import datetime
+import random
 import weather_sync
 import spotify_sync
 import db_helpers
 import schedule as uni_schedule
-from llm import chat, is_acceptable
-from persona import PERSONA, get_vibe
+from llm import chat, chat_with_retry, is_acceptable
+from persona import PERSONA, IN_CHARACTER_FALLBACKS, get_vibe
 
 OLLAMA_OPTIONS_CHAT  = {"temperature": 0.7, "top_p": 0.8, "top_k": 20, "num_ctx": 4096, "num_predict": 100}
 OLLAMA_OPTIONS_THINK = {"temperature": 0.7, "top_p": 0.8, "top_k": 20, "num_ctx": 4096, "num_predict": 80}
@@ -111,11 +112,10 @@ Vibe: {get_vibe()}"""
     messages.append({"role": "user", "content": user_message})
 
     try:
-        reply = chat(messages, OLLAMA_OPTIONS_CHAT, timeout=90)
-
-        if not is_acceptable(reply):
-            reply = "..."
-
-        return reply
+        reply, ok = chat_with_retry(messages, OLLAMA_OPTIONS_CHAT, timeout=90)
     except Exception:
-        return "one sec, thinking..."
+        return random.choice(IN_CHARACTER_FALLBACKS)
+
+    if ok:
+        return reply
+    return random.choice(IN_CHARACTER_FALLBACKS)
