@@ -161,3 +161,19 @@ def was_trigger_fired_today(trigger_type, trigger_key):
             (trigger_type, trigger_key)
         ).fetchone()[0]
     return count > 0
+
+
+def mark_proactive_attempted(trigger_type, trigger_key):
+    """Record that a proactive trigger was attempted today, regardless of
+    whether the LLM produced a sendable message. Used for dedup so a
+    SILENCE response still cools the trigger down for the rest of the day."""
+    state_key = f"attempted:{trigger_type}:{trigger_key}"
+    today = datetime.now().strftime("%Y-%m-%d")
+    set_proactive_state(state_key, today)
+
+
+def was_proactive_attempted_today(trigger_type, trigger_key):
+    state_key = f"attempted:{trigger_type}:{trigger_key}"
+    today = datetime.now().strftime("%Y-%m-%d")
+    val = get_proactive_state(state_key)
+    return val == today

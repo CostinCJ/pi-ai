@@ -71,12 +71,12 @@ def heartbeat():
     if not ok or not message or message.strip().upper() == "SILENCE":
         latency = int((_time.time() - t0) * 1000)
         logging.info(f"tick: trigger={fired_type} returned silence latency_ms={latency}")
-        # Task 6 will add db_helpers.mark_proactive_attempted here
+        db_helpers.mark_proactive_attempted(fired_type, fired_context[:100])
         return
 
     db_helpers.log_message('ai', message)
+    db_helpers.mark_proactive_attempted(fired_type, fired_context[:100])
     db_helpers.log_proactive(fired_type, fired_context[:100], message)
-    # Task 6 will add db_helpers.mark_proactive_attempted here
     send_telegram_message(message)
 
     latency = int((_time.time() - t0) * 1000)

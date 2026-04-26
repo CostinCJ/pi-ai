@@ -24,6 +24,10 @@ def new_artist_trigger():
         last_artist = db_helpers.get_proactive_state('last_artist')
         if not last_artist:
             return False, ""
+        trigger_context = f"first time hearing {last_artist} in a while, what made you put it on?"
+        if db_helpers.was_proactive_attempted_today('new_artist', trigger_context[:100]):
+            return False, ""
+        # 7-day "have we already mentioned them recently" guard, kept from before.
         cutoff = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
         with db_helpers.get_conn() as conn:
             count = conn.execute(
@@ -32,7 +36,7 @@ def new_artist_trigger():
             ).fetchone()[0]
         if count > 0:
             return False, ""
-        return True, f"first time hearing {last_artist} in a while, what made you put it on?"
+        return True, trigger_context
     except Exception:
         return False, ""
 
