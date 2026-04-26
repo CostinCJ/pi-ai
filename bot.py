@@ -1,3 +1,4 @@
+import logging
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes
 import db_helpers
@@ -9,6 +10,10 @@ import schedule as uni_schedule
 from datetime import datetime
 from config import TELEGRAM_TOKEN
 
+_log = logging.getLogger('bot')
+logging.basicConfig(filename='/home/pi/pi-ai/bot.log', level=logging.ERROR,
+                    format='%(asctime)s %(name)s %(levelname)s %(message)s')
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_msg = update.message.text
     chat_id = update.message.chat_id
@@ -17,9 +22,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         ai_reply = brain.generate_reply(user_msg)
     except Exception as e:
-        import logging
-        logging.basicConfig(filename='/home/pi/pi-ai/bot.log', level=logging.ERROR)
-        logging.error(f"brain.generate_reply failed: {e}", exc_info=True)
+        _log.error(f"brain.generate_reply failed: {e}", exc_info=True)
         ai_reply = "brain hiccup, try again in a sec"
     db_helpers.log_message('ai', ai_reply)
     await update.message.reply_text(ai_reply)

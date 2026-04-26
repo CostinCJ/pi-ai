@@ -20,7 +20,8 @@ LOG_MAX_BYTES = 5 * 1024 * 1024  # 5MB
 
 def _rotate_log():
     if os.path.exists(LOG_PATH) and os.path.getsize(LOG_PATH) > LOG_MAX_BYTES:
-        open(LOG_PATH, 'w').close()
+        with open(LOG_PATH, 'w'):
+            pass
 
 def _log(caller, latency_ms, success):
     _rotate_log()
@@ -72,7 +73,6 @@ def chat_json(messages, options=None, schema_keys=None, timeout=60):
     caller = inspect.stack()[1].function
     try:
         raw = chat(messages, options, timeout)
-        # strip any markdown code fences
         raw = re.sub(r"```json\s*", "", raw)
         raw = re.sub(r"```\s*", "", raw)
         data = json.loads(raw)
@@ -81,5 +81,8 @@ def chat_json(messages, options=None, schema_keys=None, timeout=60):
                 if k not in data:
                     return None
         return data
-    except Exception:
+    except Exception as e:
+        _log(caller, 0, False)
+        with open(LOG_PATH, 'a') as f:
+            f.write(f"  chat_json error: {type(e).__name__}: {e}\n")
         return None
