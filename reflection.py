@@ -1,18 +1,20 @@
-import sqlite3
-import json
 from datetime import datetime
-from config import DB_PATH
 import db_helpers
 from llm import chat_json
+
+MAX_LOG_CHARS = 6000
 
 def get_weekly_logs():
     with db_helpers.get_conn() as conn:
         rows = conn.execute(
-            "SELECT timestamp, sender, message FROM conversations WHERE timestamp >= datetime('now', '-7 days')"
-        ).fetchall()
+            "SELECT timestamp, sender, message FROM conversations "
+            "WHERE timestamp >= datetime('now', '-7 days') "
+            "ORDER BY timestamp DESC LIMIT 200"
+        ).fetchall()[::-1]
     if not rows:
         return None
-    return "".join(f"[{row[0]}] {row[1].upper()}: {row[2]}\n" for row in rows)
+    text = "".join(f"[{row[0]}] {row[1].upper()}: {row[2]}\n" for row in rows)
+    return text[-MAX_LOG_CHARS:] if len(text) > MAX_LOG_CHARS else text
 
 def save_reflection(profile_text, patterns):
     with db_helpers.get_conn() as conn:

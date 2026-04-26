@@ -1,6 +1,5 @@
-import time
-import logging
 import time as _time
+import logging
 import requests
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -13,7 +12,10 @@ logging.basicConfig(filename='/home/pi/pi-ai/autonomy.log', level=logging.INFO,
 
 def send_telegram_message(text):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    requests.post(url, json={"chat_id": CHAT_ID, "text": text})
+    try:
+        requests.post(url, json={"chat_id": CHAT_ID, "text": text}, timeout=10)
+    except Exception as e:
+        logging.error(f"send_telegram_message failed: {e}")
 
 def heartbeat():
     t0 = _time.time()
@@ -30,6 +32,8 @@ def heartbeat():
         db_helpers.log_message('ai', thought)
         send_telegram_message(thought)
         logging.info(f"tick: sent message latency_ms={latency}")
+    elif thought is None:
+        logging.error(f"tick: brain returned None (possible Ollama error) latency_ms={latency}")
     else:
         logging.info(f"tick: silence latency_ms={latency}")
 

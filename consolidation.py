@@ -1,5 +1,4 @@
-import sqlite3
-import json
+import logging
 from datetime import datetime
 from config import DB_PATH
 import db_helpers
@@ -66,7 +65,7 @@ Output strictly as a JSON object with this exact format:
 
         print("Daily consolidation complete.")
     except Exception as e:
-        print(f"Consolidation failed: {e}")
+        logging.error(f"Consolidation DB write failed: {e}", exc_info=True)
 
 if __name__ == '__main__':
     extract_facts_and_summarize()
