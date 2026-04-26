@@ -7,7 +7,7 @@ import db_helpers
 from config import TELEGRAM_TOKEN, CHAT_ID
 from triggers import ALL_TRIGGERS
 from llm import chat_with_retry
-from persona import PERSONA, IN_CHARACTER_FALLBACKS
+from persona import PERSONA
 
 logging.basicConfig(filename='/home/pi/pi-ai/autonomy.log', level=logging.INFO,
                     format='%(asctime)s %(message)s')

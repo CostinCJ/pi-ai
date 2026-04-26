@@ -22,4 +22,7 @@ def test_phrasing_call_includes_persona_system_prompt(fake_db):
     msgs = captured["messages"]
     assert msgs[0]["role"] == "system"
     assert "Lache" in msgs[0]["content"]
-    assert "no poetry" in msgs[0]["content"].lower() or "casual" in msgs[0]["content"].lower()
+    assert "casual" in msgs[0]["content"].lower()
+    assert "no metaphors" in msgs[0]["content"].lower() or "no poetry" in msgs[0]["content"].lower()
+    assert msgs[1]["role"] == "user"
+    assert "Architects" in msgs[1]["content"]
