@@ -1,4 +1,5 @@
 import logging
+import random
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes
 import db_helpers
@@ -11,6 +12,7 @@ import spotify_sync
 import schedule as uni_schedule
 from datetime import datetime
 from config import TELEGRAM_TOKEN
+from persona import IN_CHARACTER_FALLBACKS
 
 _log = logging.getLogger('bot')
 logging.basicConfig(filename='/home/pi/pi-ai/bot.log', level=logging.INFO,
@@ -30,8 +32,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not ai_reply or not ai_reply.strip():
         _log.error("generate_reply returned empty; using last-resort fallback")
-        from persona import IN_CHARACTER_FALLBACKS
-        import random
         ai_reply = random.choice(IN_CHARACTER_FALLBACKS)
 
     db_helpers.log_message('ai', ai_reply)
