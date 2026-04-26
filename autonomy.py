@@ -5,6 +5,9 @@ from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 import db_helpers
 from config import TELEGRAM_TOKEN, CHAT_ID
+from triggers import ALL_TRIGGERS
+from llm import chat_with_retry
+from persona import PERSONA, IN_CHARACTER_FALLBACKS
 
 logging.basicConfig(filename='/home/pi/pi-ai/autonomy.log', level=logging.INFO,
                     format='%(asctime)s %(message)s')
@@ -28,9 +31,6 @@ def heartbeat():
         logging.info("tick: recently active, skipped")
         return
 
-    from triggers import ALL_TRIGGERS
-    from llm import chat
-
     fired_type = None
     fired_context = None
     for trigger_type, trigger_fn in ALL_TRIGGERS:
@@ -48,23 +48,35 @@ def heartbeat():
         logging.info(f"tick: no trigger fired latency_ms={latency}")
         return
 
+    phrasing_messages = [
+        {"role": "system", "content": (
+            f"{PERSONA}\n\n"
+            "You will be given a one-line idea. Rephrase it in Lache's voice. "
+            "Output ONE casual lowercase sentence, max 20 words. No emojis, "
+            "no metaphors, no compliments, no follow-up explanation. If the "
+            "idea is empty, reply with the literal word SILENCE."
+        )},
+        {"role": "user", "content": fired_context},
+    ]
     try:
-        message = chat(
-            [{"role": "user", "content": f"Phrase this as 1 short Lache message: {fired_context}"}],
+        message, ok = chat_with_retry(
+            phrasing_messages,
             {"temperature": 0.7, "num_predict": 60},
-            timeout=60
+            timeout=60,
         )
     except Exception as e:
         logging.error(f"LLM phrasing failed for trigger {fired_type}: {e}")
         return
 
-    if not message or message.strip().upper() == "SILENCE":
+    if not ok or not message or message.strip().upper() == "SILENCE":
         latency = int((_time.time() - t0) * 1000)
-        logging.info(f"tick: trigger={fired_type} but LLM returned silence latency_ms={latency}")
+        logging.info(f"tick: trigger={fired_type} returned silence latency_ms={latency}")
+        # Task 6 will add db_helpers.mark_proactive_attempted here
         return
 
     db_helpers.log_message('ai', message)
     db_helpers.log_proactive(fired_type, fired_context[:100], message)
+    # Task 6 will add db_helpers.mark_proactive_attempted here
     send_telegram_message(message)
 
     latency = int((_time.time() - t0) * 1000)
