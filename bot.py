@@ -14,7 +14,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
     db_helpers.log_message('user', user_msg)
     await context.bot.send_chat_action(chat_id=chat_id, action='typing')
-    ai_reply = brain.generate_reply(user_msg)
+    try:
+        ai_reply = brain.generate_reply(user_msg)
+    except Exception as e:
+        import logging
+        logging.basicConfig(filename='/home/pi/pi-ai/bot.log', level=logging.ERROR)
+        logging.error(f"brain.generate_reply failed: {e}", exc_info=True)
+        ai_reply = "brain hiccup, try again in a sec"
     db_helpers.log_message('ai', ai_reply)
     await update.message.reply_text(ai_reply)
 
