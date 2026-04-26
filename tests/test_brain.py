@@ -3,17 +3,18 @@ import brain
 
 
 def test_generate_reply_never_returns_empty(fake_db):
-    """If the LLM returns whitespace or nothing, generate_reply must still
-    produce a non-empty in-character string."""
-    with patch("brain.chat", return_value="   "):
+    """If chat_with_retry fails validation (whitespace), generate_reply must
+    produce a non-empty in-character fallback string."""
+    with patch("brain.chat_with_retry", return_value=("   ", False)):
         reply = brain.generate_reply("how are you")
     assert reply.strip() != ""
     assert reply != "..."
 
 
 def test_generate_reply_never_returns_three_dots(fake_db):
-    """If is_acceptable rejects the first try, the user must not see '...'."""
-    with patch("brain.chat", return_value="your playlist is a masterpiece"):
+    """If chat_with_retry fails validation (sycophantic), generate_reply must
+    return an in-character fallback — never the literal '...'."""
+    with patch("brain.chat_with_retry", return_value=("your playlist is a masterpiece", False)):
         reply = brain.generate_reply("how are you")
     assert reply != "..."
     assert reply.strip() != ""
