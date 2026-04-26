@@ -37,3 +37,30 @@ async def test_telegram_reply_failure_is_logged_not_swallowed(fake_db, caplog):
 
     assert any("reply_text" in r.message or "network" in r.message
                for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_repeated_user_message_logs_quality_event(fake_db):
+    """When the user sends nearly the same text within 5 minutes, log a
+    'user_repeated' quality event — that's our signal the previous reply
+    failed (e.g. the 4:44 vs 4:46 'going out' duplicate)."""
+    import db_helpers
+    db_helpers.log_message('user', 'yeah i m going out')
+    db_helpers.log_message('ai', '...')
+
+    update = MagicMock()
+    update.message.text = "i m gonna go out"
+    update.message.chat_id = 123
+    update.message.reply_text = AsyncMock()
+
+    ctx = MagicMock()
+    ctx.bot.send_chat_action = AsyncMock()
+
+    with patch("bot.brain.generate_reply", return_value="bars or cruising?"):
+        await bot.handle_message(update, ctx)
+
+    with db_helpers.get_conn() as conn:
+        events = conn.execute(
+            "SELECT event_type FROM quality_log"
+        ).fetchall()
+    assert any(e[0] == "user_repeated" for e in events)
