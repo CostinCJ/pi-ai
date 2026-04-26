@@ -1,7 +1,9 @@
 import os
 
 DB_PATH    = '/home/pi/pi-ai/memory.db'
-OLLAMA_URL = 'http://localhost:11434/api/generate'
+OLLAMA_BASE = 'http://localhost:11434'
+OLLAMA_CHAT_URL = f'{OLLAMA_BASE}/api/chat'
+OLLAMA_GENERATE_URL = f'{OLLAMA_BASE}/api/generate'
 MODEL      = 'hf.co/MaziyarPanahi/Qwen3-1.7B-GGUF:Q4_K_M'
 
 TELEGRAM_TOKEN = '8689871377:AAFWsv-5jRjwHAm3moGUeZsd8sun2B7S4ts'
