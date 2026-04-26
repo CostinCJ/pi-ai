@@ -1,13 +1,8 @@
-import requests
-import threading
-import json
-import re
 from datetime import datetime
 import weather_sync
 import spotify_sync
 import db_helpers
 import schedule as uni_schedule
-from config import MODEL
 from llm import chat, is_acceptable
 
 PERSONA = """/no_think
@@ -54,7 +49,6 @@ def _build_context_line():
 def think_and_decide():
     now = datetime.now()
     current_time = now.strftime("%A, %H:%M")
-    history = db_helpers.get_recent_history(limit=10)
     last_sent = db_helpers.get_last_ai_message()
     context = _build_context_line()
     upcoming = uni_schedule.has_class_soon()
@@ -66,7 +60,11 @@ Time: {current_time} | Weather: {weather_sync.get_current_weather()} | {uni_sche
 {f"Class soon: {upcoming}" if upcoming else ""}
 Last message you sent: {last_sent['text'] if last_sent else "(none)"}"""
 
-    history_text = history if history else "(no recent conversation)"
+    raw_history = db_helpers.get_recent_history_messages(limit=10)
+    history_text = "".join(
+        f"{'USER' if m['role']=='user' else 'LACHE'}: {m['content']}\n"
+        for m in raw_history
+    ) or "(no recent conversation)"
 
     try:
         result = chat([
