@@ -2,6 +2,8 @@ import sqlite3
 from datetime import datetime, timedelta
 from config import DB_PATH
 
+SEED_PROFILE = "The user is a university student in Cluj-Napoca, Romania (EEST timezone)..."
+
 # Added timeout=10 to handle concurrent writes gracefully
 def get_conn():
     return sqlite3.connect(DB_PATH, timeout=10)
@@ -28,7 +30,7 @@ def get_latest_profile():
         ).fetchone()
     if row:
         return row[0]
-    return "The user is a university student in Cluj-Napoca, Romania (EEST timezone)..."
+    return SEED_PROFILE
 
 def get_last_ai_message():
     with get_conn() as conn:

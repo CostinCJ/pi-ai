@@ -1,9 +1,9 @@
 import sqlite3
-import requests
 import json
 from datetime import datetime
-from config import DB_PATH, OLLAMA_URL, MODEL
+from config import DB_PATH
 import db_helpers
+from llm import chat_json
 
 def get_weekly_logs():
     with db_helpers.get_conn() as conn:
@@ -29,9 +29,9 @@ def run_reflection():
         return
 
     current_profile = db_helpers.get_latest_profile()
-    
+
     prompt = f"""You are a personal AI analyzing your interaction logs from the past week.
-    
+
 [CURRENT BASELINE PROFILE]
 {current_profile}
 
@@ -48,22 +48,17 @@ Output strictly as a JSON object with this exact format, and nothing else:
     "patterns": ["pattern 1", "pattern 2"]
 }}"""
 
-    try:
-        response = requests.post(OLLAMA_URL, json={
-            "model": MODEL,
-            "prompt": prompt,
-            "stream": False,
-            "format": "json",
-            "options": {"temperature": 0.3}
-        })
-        
-        raw_data = response.json().get("response", "").strip()
-        data = json.loads(raw_data)
-        
-        save_reflection(data.get("updated_profile", current_profile), data.get("patterns", []))
-        print("Reflection and patterns saved successfully.")
-    except Exception as e:
-        print(f"Reflection failed: {e}")
+    messages = [
+        {"role": "system", "content": "/no_think\nYou are a precise JSON extractor. Output only valid JSON."},
+        {"role": "user", "content": prompt}
+    ]
+    data = chat_json(messages, {"temperature": 0.3, "format": "json"}, schema_keys=["updated_profile", "patterns"], timeout=180)
+    if data is None:
+        print("Reflection LLM call failed. Skipping.")
+        return
+
+    save_reflection(data.get("updated_profile", current_profile), data.get("patterns", []))
+    print("Reflection and patterns saved successfully.")
 
 if __name__ == '__main__':
     run_reflection()

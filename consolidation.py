@@ -1,9 +1,9 @@
 import sqlite3
-import requests
 import json
 from datetime import datetime
-from config import DB_PATH, OLLAMA_URL, MODEL
+from config import DB_PATH
 import db_helpers
+from llm import chat_json
 
 def extract_facts_and_summarize():
     with db_helpers.get_conn() as conn:
@@ -11,7 +11,7 @@ def extract_facts_and_summarize():
         rows = conn.execute(
             "SELECT id, sender, message FROM conversations WHERE timestamp >= datetime('now', '-1 day') AND sender != 'memory'"
         ).fetchall()
-        
+
     if len(rows) < 4:
         print("Not enough messages to consolidate. Skipping.")
         return
@@ -37,34 +37,33 @@ Output strictly as a JSON object with this exact format:
     "summary": "Summary including mood and topics discussed."
 }}"""
 
+    messages = [
+        {"role": "system", "content": "/no_think\nYou are a precise JSON extractor. Output only valid JSON."},
+        {"role": "user", "content": prompt}
+    ]
+    data = chat_json(messages, {"temperature": 0.2, "format": "json"}, schema_keys=["facts", "summary"], timeout=120)
+    if data is None:
+        print("Consolidation LLM call failed or returned invalid JSON. Skipping.")
+        return
+
     try:
-        response = requests.post(OLLAMA_URL, json={
-            "model": MODEL,
-            "prompt": prompt,
-            "stream": False,
-            "format": "json",
-            "options": {"temperature": 0.2}
-        })
-        
-        data = json.loads(response.json().get("response", "").strip())
-        
         with db_helpers.get_conn() as conn:
             # 1. Insert Facts
             for key, val in data.get("facts", {}).items():
                 conn.execute(
-                    "INSERT OR REPLACE INTO user_facts (fact_key, fact_value) VALUES (?, ?)", 
+                    "INSERT OR REPLACE INTO user_facts (fact_key, fact_value) VALUES (?, ?)",
                     (key, val)
                 )
-            
+
             # 2. Insert Summary as a 'memory' message
             conn.execute(
                 "INSERT INTO conversations (sender, message) VALUES ('memory', ?)",
                 (f"[PREVIOUSLY CONTEXT] {data.get('summary', '')}",)
             )
-            
+
             # 3. Delete the raw messages to keep DB lean
             conn.execute(f"DELETE FROM conversations WHERE id IN ({','.join('?' * len(row_ids))})", row_ids)
-            
+
         print("Daily consolidation complete.")
     except Exception as e:
         print(f"Consolidation failed: {e}")
