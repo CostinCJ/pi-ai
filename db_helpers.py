@@ -15,14 +15,6 @@ def log_message(sender, message):
             (sender, message)
         )
 
-def get_recent_history(limit=8):
-    with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT sender, message FROM conversations ORDER BY timestamp DESC LIMIT ?",
-            (limit,)
-        ).fetchall()[::-1]
-    return "".join(f"{row[0].upper()}: {row[1]}\n" for row in rows)
-
 def get_latest_profile():
     with get_conn() as conn:
         row = conn.execute(
