@@ -177,3 +177,14 @@ def was_proactive_attempted_today(trigger_type, trigger_key):
     today = datetime.now().strftime("%Y-%m-%d")
     val = get_proactive_state(state_key)
     return val == today
+
+
+def log_quality_event(event_type, detail=""):
+    try:
+        with get_conn() as conn:
+            conn.execute(
+                "INSERT INTO quality_log (event_type, detail) VALUES (?, ?)",
+                (event_type, str(detail)[:500])
+            )
+    except Exception:
+        pass

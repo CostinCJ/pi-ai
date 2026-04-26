@@ -120,6 +120,10 @@ def chat_with_retry(messages, options=None, timeout=60, retry_hint=None):
     first = chat(messages, options, timeout)
     if is_in_character(first):
         return first, True
+
+    import db_helpers as _db
+    _db.log_quality_event('retry_triggered', first[:200])
+
     hint = retry_hint or (
         "your previous draft was either empty or too poetic. write one short, "
         "lowercase, casual sentence in lache's voice — no metaphors, no "
@@ -132,5 +136,7 @@ def chat_with_retry(messages, options=None, timeout=60, retry_hint=None):
     ]
     second = chat(retry_messages, options, timeout)
     if is_in_character(second):
+        _db.log_quality_event('retry_succeeded', second[:200])
         return second, True
+    _db.log_quality_event('retry_failed', second[:200])
     return second, False

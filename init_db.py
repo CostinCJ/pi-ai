@@ -97,6 +97,16 @@ def setup_database():
     )
     ''')
 
+    # 10. Quality Log: Telemetry for retry/fallback events
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS quality_log (
+            id INTEGER PRIMARY KEY,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            event_type TEXT,
+            detail TEXT
+        )
+    """)
+
     # Add column migrations for user_facts
     for sql in [
         "ALTER TABLE user_facts ADD COLUMN source TEXT DEFAULT 'unknown'",
