@@ -45,6 +45,69 @@ def setup_database():
     )
     ''')
 
+    # 5. Daily Signal: Mood, energy, topics, and summary for each day
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS daily_signal (
+        date TEXT PRIMARY KEY,
+        mood TEXT,
+        energy INTEGER,
+        main_topics TEXT,
+        summary TEXT,
+        message_count INTEGER
+    )
+    ''')
+
+    # 6. Rolling Summary: Latest synthesized summary of ongoing interests
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS rolling_summary (
+        id INTEGER PRIMARY KEY,
+        generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        summary TEXT
+    )
+    ''')
+
+    # 7. Open Threads: Unresolved topics or questions to follow up on
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS open_threads (
+        id INTEGER PRIMARY KEY,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        description TEXT,
+        status TEXT DEFAULT 'open',
+        last_referenced DATETIME
+    )
+    ''')
+
+    # 8. Proactive State: Key-value store for proactive engagement state
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS proactive_state (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+
+    # 9. Proactive Log: History of proactive messages and their triggers
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS proactive_log (
+        id INTEGER PRIMARY KEY,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        trigger_type TEXT,
+        trigger_key TEXT,
+        message_sent TEXT
+    )
+    ''')
+
+    # Add column migrations for user_facts
+    for sql in [
+        "ALTER TABLE user_facts ADD COLUMN source TEXT DEFAULT 'unknown'",
+        "ALTER TABLE user_facts ADD COLUMN confidence REAL DEFAULT 1.0",
+        "ALTER TABLE user_facts ADD COLUMN times_referenced INTEGER DEFAULT 0",
+    ]:
+        try:
+            cursor.execute(sql)
+        except sqlite3.OperationalError:
+            pass  # column already exists
+
     conn.commit()
     conn.close()
     print(f"Brain initialized. Memory structure created at: {os.path.abspath(DB_PATH)}")
