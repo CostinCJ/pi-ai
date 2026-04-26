@@ -52,9 +52,44 @@ async def cmd_reflect(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"failed: {e}")
 
+async def cmd_consolidate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("running consolidation...")
+    try:
+        consolidation.extract_facts_and_summarize()
+        await update.message.reply_text("done. facts and summary updated.")
+    except Exception as e:
+        await update.message.reply_text(f"failed: {e}")
+
+async def cmd_forget(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    args = context.args
+    if not args:
+        await update.message.reply_text("usage: /forget <key>")
+        return
+    key = " ".join(args)
+    with db_helpers.get_conn() as conn:
+        deleted = conn.execute("DELETE FROM user_facts WHERE fact_key=?", (key,)).rowcount
+    if deleted:
+        await update.message.reply_text(f"forgot: {key}")
+    else:
+        await update.message.reply_text(f"no fact found for key: {key}")
+
+async def cmd_threads(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    threads = db_helpers.get_open_threads(status='open')
+    if not threads:
+        await update.message.reply_text("no open threads.")
+        return
+    lines = [
+        f"[{t['id']}] {t['description']} (last ref: {t['last_referenced'] or 'never'})"
+        for t in threads
+    ]
+    await update.message.reply_text("\n".join(lines))
+
 if __name__ == '__main__':
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
     app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("reflect", cmd_reflect))
+    app.add_handler(CommandHandler("consolidate", cmd_consolidate))
+    app.add_handler(CommandHandler("forget", cmd_forget))
+    app.add_handler(CommandHandler("threads", cmd_threads))
     app.run_polling()
