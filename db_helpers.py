@@ -44,9 +44,17 @@ def was_recently_active(minutes=90):
 
 # --- NEW FUNCTIONS FOR BRAIN.PY ---
 
-def get_user_facts():
+def get_user_facts(limit=None):
     with get_conn() as conn:
-        rows = conn.execute("SELECT fact_key, fact_value FROM user_facts").fetchall()
+        if limit:
+            rows = conn.execute(
+                "SELECT fact_key, fact_value FROM user_facts ORDER BY last_updated DESC LIMIT ?",
+                (limit,)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT fact_key, fact_value FROM user_facts ORDER BY last_updated DESC"
+            ).fetchall()
     if not rows:
         return "(no specific facts stored yet)"
     return "\n".join(f"- {row[1]}" for row in rows)
