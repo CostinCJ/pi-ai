@@ -13,7 +13,7 @@ from datetime import datetime
 from config import TELEGRAM_TOKEN
 
 _log = logging.getLogger('bot')
-logging.basicConfig(filename='/home/pi/pi-ai/bot.log', level=logging.ERROR,
+logging.basicConfig(filename='/home/pi/pi-ai/bot.log', level=logging.INFO,
                     format='%(asctime)s %(name)s %(levelname)s %(message)s')
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -21,13 +21,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
     db_helpers.log_message('user', user_msg)
     await context.bot.send_chat_action(chat_id=chat_id, action='typing')
+
     try:
         ai_reply = brain.generate_reply(user_msg)
     except Exception as e:
         _log.error(f"brain.generate_reply failed: {e}", exc_info=True)
         ai_reply = "brain hiccup, try again in a sec"
+
+    if not ai_reply or not ai_reply.strip():
+        _log.error("generate_reply returned empty; using last-resort fallback")
+        from persona import IN_CHARACTER_FALLBACKS
+        import random
+        ai_reply = random.choice(IN_CHARACTER_FALLBACKS)
+
     db_helpers.log_message('ai', ai_reply)
-    await update.message.reply_text(ai_reply)
+
+    try:
+        await update.message.reply_text(ai_reply)
+    except Exception as e:
+        _log.error(f"reply_text failed: {e}", exc_info=True)
 
     for fact in regex_facts.extract_facts(user_msg):
         with db_helpers.get_conn() as conn:
