@@ -13,6 +13,10 @@ BANNED_PHRASES = [
     "let the silence", "let the city", "let the night", "let the music",
     "symphony", "composer", "you're the artist", "speak for you",
     "king of the night", "no need for extra effort",
+    "masterpiece", "the air is crisp", "alive with energy",
+    "you're doing great", "just like the city", "today is perfect",
+    "playlist is a", "as your personal", "personal ai",
+    "i'm here to", "i am here to",
 ]
 
 LOG_PATH = '/home/pi/pi-ai/llm.log'
@@ -40,6 +44,25 @@ def _clean(text):
 def is_acceptable(text):
     lower = text.lower()
     return not any(b in lower for b in BANNED_PHRASES)
+
+def is_in_character(text):
+    """Structural style filter — catches poetry/sycophancy patterns the
+    blocklist misses. Returns True if the text looks like Lache."""
+    if not text or not text.strip():
+        return False
+    s = text.strip()
+    if len(s) > 220:
+        return False
+    if s.count(".") + s.count("!") + s.count("?") > 3:
+        return False
+    if s.count("—") >= 2:
+        return False
+    words = [w for w in s.split() if w.isalpha()]
+    if len(words) >= 6:
+        capitalised = sum(1 for w in words if w[0].isupper())
+        if capitalised / len(words) > 0.5:
+            return False
+    return is_acceptable(s)
 
 def chat(messages, options=None, timeout=60):
     caller = inspect.stack()[1].function
@@ -86,3 +109,28 @@ def chat_json(messages, options=None, schema_keys=None, timeout=60):
         with open(LOG_PATH, 'a') as f:
             f.write(f"  chat_json error: {type(e).__name__}: {e}\n")
         return None
+
+def chat_with_retry(messages, options=None, timeout=60, retry_hint=None):
+    """Generate, validate against `is_in_character`, and retry once with a
+    corrective hint if the first try fails. Returns (text, ok_flag).
+
+    ok_flag is False when both attempts failed — caller is responsible for
+    surfacing an in-character fallback instead of the (possibly empty) text.
+    """
+    first = chat(messages, options, timeout)
+    if is_in_character(first):
+        return first, True
+    hint = retry_hint or (
+        "your previous draft was either empty or too poetic. write one short, "
+        "lowercase, casual sentence in lache's voice — no metaphors, no "
+        "compliments, no marketing copy. if you have nothing real to say, "
+        "ask a short follow-up question."
+    )
+    retry_messages = list(messages) + [
+        {"role": "assistant", "content": first or "(empty)"},
+        {"role": "user", "content": hint},
+    ]
+    second = chat(retry_messages, options, timeout)
+    if is_in_character(second):
+        return second, True
+    return second, False

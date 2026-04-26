@@ -32,3 +32,12 @@ def get_vibe():
         return "midday neutral"
     else:
         return "evening casual"
+
+
+IN_CHARACTER_FALLBACKS = [
+    "hm, brain glitched. say it again?",
+    "blanked for a sec, what was that?",
+    "yeah?",
+    "tell me more",
+    "go on",
+]
