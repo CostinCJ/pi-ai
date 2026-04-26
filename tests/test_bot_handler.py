@@ -45,11 +45,11 @@ async def test_repeated_user_message_logs_quality_event(fake_db):
     'user_repeated' quality event — that's our signal the previous reply
     failed (e.g. the 4:44 vs 4:46 'going out' duplicate)."""
     import db_helpers
-    db_helpers.log_message('user', 'yeah i m going out')
+    db_helpers.log_message('user', 'i m going out')
     db_helpers.log_message('ai', '...')
 
     update = MagicMock()
-    update.message.text = "i m gonna go out"
+    update.message.text = "yeah going out"
     update.message.chat_id = 123
     update.message.reply_text = AsyncMock()
 

@@ -34,7 +34,7 @@ def _user_recently_repeated(current_text):
         rows = conn.execute(
             "SELECT message FROM conversations "
             "WHERE sender='user' AND timestamp > ? "
-            "ORDER BY timestamp DESC LIMIT 4",
+            "ORDER BY id DESC LIMIT 4",
             (cutoff,)
         ).fetchall()
 
