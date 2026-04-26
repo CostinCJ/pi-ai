@@ -4,45 +4,40 @@ import spotify_sync
 import db_helpers
 import schedule as uni_schedule
 from llm import chat, is_acceptable
-
-PERSONA = """/no_think
-You are Lache — a personal AI on a Raspberry Pi in Cluj-Napoca, Romania. Talk exactly like these examples:
-
-User: how are you doing
-Lache: running fine, nothing broken yet. you good?
-
-User: what time is it
-Lache: check your phone lol. it's Sunday afternoon.
-
-User: i just bought a new guitar amp
-Lache: nice, what did you get? those things are loud as hell in an apartment
-
-User: i think i'll go out tonight
-Lache: bars or just driving around? classic move either way
-
-Rules: no emojis, no *actions*, no "I'm here to help", no poetry, no filler. Short and direct unless they ask something that genuinely needs more. Only mention league/music/habits if they appear in the context."""
+from persona import PERSONA, get_vibe
 
 OLLAMA_OPTIONS_CHAT  = {"temperature": 0.7, "top_p": 0.8, "top_k": 20, "num_ctx": 4096, "num_predict": 100}
 OLLAMA_OPTIONS_THINK = {"temperature": 0.7, "top_p": 0.8, "top_k": 20, "num_ctx": 4096, "num_predict": 80}
 
-FACT_TRIGGERS = [
-    "i bought", "i got", "i quit", "i have", "i own", "i play ",
-    "i hate", "i love", "i started", "i stopped", "i passed", "i failed",
-    "my guitar", "my car", "my bike", "i'm a ", "i am a ",
-]
 
-
-def _build_context_line():
+def _build_context_line(user_message=""):
     parts = []
-    facts = db_helpers.get_user_facts()
+    facts = db_helpers.get_user_facts(limit=5)
     if facts and "no specific" not in facts:
-        parts.append(f"Facts: {facts}")
-    patterns = db_helpers.get_recent_patterns()
-    if patterns and "no new" not in patterns:
-        parts.append(f"Patterns: {patterns}")
+        parts.append(f"Facts: {facts[:200]}")
     spotify = spotify_sync.get_recent_tracks()
     if spotify and "unavailable" not in spotify.lower():
-        parts.append(f"Music: {spotify}")
+        clean_spotify = spotify.replace("Recent tracks: ", "")
+        parts.append(clean_spotify[:200])
+    if len(user_message) > 40:
+        patterns = db_helpers.get_recent_patterns()
+        if patterns and "no new" not in patterns:
+            parts.append(f"Patterns: {patterns[:200]}")
+    return " | ".join(parts) if parts else ""
+
+
+def _build_proactive_context():
+    parts = []
+    facts = db_helpers.get_user_facts(limit=5)
+    if facts and "no specific" not in facts:
+        parts.append(f"Facts: {facts[:200]}")
+    patterns = db_helpers.get_recent_patterns()
+    if patterns and "no new" not in patterns:
+        parts.append(f"Patterns: {patterns[:200]}")
+    spotify = spotify_sync.get_recent_tracks()
+    if spotify and "unavailable" not in spotify.lower():
+        clean_spotify = spotify.replace("Recent tracks: ", "")
+        parts.append(clean_spotify[:200])
     return " | ".join(parts) if parts else ""
 
 
@@ -50,7 +45,7 @@ def think_and_decide():
     now = datetime.now()
     current_time = now.strftime("%A, %H:%M")
     last_sent = db_helpers.get_last_ai_message()
-    context = _build_context_line()
+    context = _build_proactive_context()
     upcoming = uni_schedule.has_class_soon()
 
     system = f"""{PERSONA}
@@ -58,7 +53,8 @@ def think_and_decide():
 Time: {current_time} | Weather: {weather_sync.get_current_weather()} | {uni_schedule.get_todays_classes()}
 {context}
 {f"Class soon: {upcoming}" if upcoming else ""}
-Last message you sent: {last_sent['text'] if last_sent else "(none)"}"""
+Last message you sent: {last_sent['text'] if last_sent else "(none)"}
+Vibe: {get_vibe()}"""
 
     raw_history = db_helpers.get_recent_history_messages(limit=10)
     history_text = "".join(
@@ -91,7 +87,7 @@ Do you have something real and specific to say right now?
 
 def generate_reply(user_message):
     current_time = datetime.now().strftime("%A, %H:%M")
-    context = _build_context_line()
+    context = _build_context_line(user_message)
     classes = uni_schedule.get_todays_classes()
     upcoming = uni_schedule.has_class_soon()
 
@@ -99,10 +95,14 @@ def generate_reply(user_message):
     is_music = any(k in user_message.lower() for k in music_keywords)
     music_note = " Use the music data from context to answer specifically." if is_music else ""
 
+    rolling = db_helpers.get_rolling_summary()
+    earlier = f"\nEarlier: {rolling[:300]}" if rolling and len(user_message) > 40 else ""
+
     system = f"""{PERSONA}
 
 Time: {current_time} | {classes}{f" | {upcoming} soon" if upcoming else ""}
-{context}{music_note}"""
+{context}{music_note}{earlier}
+Vibe: {get_vibe()}"""
 
     history_messages = db_helpers.get_recent_history_messages(limit=8)
 

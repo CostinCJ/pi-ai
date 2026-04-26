@@ -31,27 +31,40 @@ def get_recent_tracks():
     try:
         sp = _get_sp()
         results = sp.current_user_recently_played(limit=5)
-        
+
         if not results or not results.get('items'):
             return "No tracks played recently."
-            
-        output = "Recent tracks: "
+
+        first_artist = results['items'][0]['track']['artists'][0]['name']
+        track_last_artist(first_artist)
+
+        output = ""
         for item in results['items']:
             artist = item['track']['artists'][0]['name']
             name = item['track']['name']
             output += f"{artist} - {name}, "
-            
+
         output = output.rstrip(", ")
         current = get_current_track()
-        
+
         if current:
             return current + " | " + output
-            
+
         return output
-        
-    except Exception as e:
-        # If anything major fails, return a string, don't crash the bot
-        return f"Spotify data unavailable."
+
+    except Exception:
+        return "Spotify data unavailable."
+
+
+def get_last_artist():
+    import db_helpers
+    return db_helpers.get_proactive_state('last_artist')
+
+
+def track_last_artist(artist):
+    import db_helpers
+    db_helpers.set_proactive_state('last_artist', artist)
+
 
 if __name__ == '__main__':
     print(get_recent_tracks())
