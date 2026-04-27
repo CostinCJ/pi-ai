@@ -19,7 +19,8 @@ SYSTEM_PROCESSES = {
     'wmiprvse.exe', 'textinputhost.exe', 'applicationframehost.exe',
     'backgroundtaskhost.exe', 'memory compression', 'memcompression',
     'sppsvc.exe', 'dashost.exe', 'wudfhost.exe', 'widgetservice.exe',
-    'widgets.exe', 'explorer.exe',
+    'widgets.exe', 'explorer.exe', 'nvcontainer.exe', 'nvcontainer',
+    'msedgewebview2.exe', 'msedgewebview2',
 }
 
 logging.basicConfig(
