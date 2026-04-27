@@ -60,6 +60,8 @@ def get_user_facts(limit=None):
     return "\n".join(f"- {row[1]}" for row in rows)
 
 def get_recent_history_messages(limit=8):
+    import re
+    from persona import IN_CHARACTER_FALLBACKS
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT sender, message FROM conversations ORDER BY timestamp DESC LIMIT ?",
@@ -67,6 +69,11 @@ def get_recent_history_messages(limit=8):
         ).fetchall()[::-1]
     messages = []
     for sender, message in rows:
+        message = re.sub(r"</?think>", "", message).strip()
+        if not message:
+            continue
+        if sender == 'ai' and message in IN_CHARACTER_FALLBACKS:
+            continue
         if sender == 'user':
             messages.append({"role": "user", "content": message})
         elif sender == 'ai':
@@ -188,3 +195,16 @@ def log_quality_event(event_type, detail=""):
             )
     except Exception:
         pass
+
+
+def log_presence_event(event):
+    with get_conn() as conn:
+        conn.execute("INSERT INTO presence_log (event) VALUES (?)", (event,))
+
+
+def get_last_presence_event():
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT event, timestamp FROM presence_log ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    return {"event": row[0], "timestamp": row[1]} if row else None
