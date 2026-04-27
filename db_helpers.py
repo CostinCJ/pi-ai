@@ -208,3 +208,32 @@ def get_last_presence_event():
             "SELECT event, timestamp FROM presence_log ORDER BY id DESC LIMIT 1"
         ).fetchone()
     return {"event": row[0], "timestamp": row[1]} if row else None
+
+
+def log_session_snapshot(apps):
+    import json as _json
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO session_snapshot (timestamp, apps) VALUES (?, ?)",
+            (ts, _json.dumps(apps))
+        )
+        conn.execute(
+            "DELETE FROM session_snapshot WHERE id NOT IN "
+            "(SELECT id FROM session_snapshot ORDER BY id DESC LIMIT 50)"
+        )
+
+
+def get_latest_session_snapshot():
+    import json as _json
+    from datetime import datetime as _dt, timedelta as _td
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT apps, timestamp FROM session_snapshot ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    if not row:
+        return None
+    ts = _dt.strptime(row[1], "%Y-%m-%d %H:%M:%S")
+    if (_dt.now() - ts).total_seconds() > 300:
+        return None
+    return _json.loads(row[0])
