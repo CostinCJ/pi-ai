@@ -14,3 +14,7 @@ OWM_API_KEY = '08bcc3a5977d6ba6fb97c8968dcb22ec'
 SPOTIFY_CLIENT_ID     = '8ae0ce2f360949cab272d137ce3a23f2'
 SPOTIFY_CLIENT_SECRET = 'cd6881d037b841b88011e72808c452c2'
 SPOTIFY_REDIRECT_URI  = 'http://127.0.0.1:8888/callback'
+
+LAPTOP_MAC = 'AA-BB-CC-DD-EE-FF'
+
+PHONE_MAC = '<your-phone-mac>'  # e.g. 'aa:bb:cc:dd:ee:ff' — lowercase, colon-separated
