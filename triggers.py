@@ -108,6 +108,31 @@ def open_thread_trigger():
     return True, f"yo, did you ever {description}?"
 
 
+GAME_KEYWORDS = {'league', 'valorant', 'cs2', 'cyberpunk', 'fortnite', 'minecraft', 'overwatch'}
+
+
+def session_trigger():
+    snapshot = db_helpers.get_latest_session_snapshot()
+    if not snapshot:
+        return False, ""
+
+    game = next(
+        (app["name"] for app in snapshot
+         if any(kw in app["name"].lower() for kw in GAME_KEYWORDS)),
+        None
+    )
+    if not game:
+        return False, ""
+
+    trigger_key = f"gaming_session_{datetime.now().strftime('%Y-%m-%d')}"
+    if db_helpers.was_proactive_attempted_today('session', trigger_key):
+        return False, ""
+
+    others = [app["name"] for app in snapshot if app["name"] != game]
+    others_str = ", ".join(others[:3]) if others else "nothing else notable"
+    return True, f"user just started a gaming session, {game} is running alongside {others_str}"
+
+
 def home_arrival_trigger():
     is_home = phone_is_home()
     if is_home is None:
@@ -143,10 +168,11 @@ def home_arrival_trigger():
 
 
 ALL_TRIGGERS = [
-    ('class_soon', has_class_soon_trigger),
-    ('new_artist', new_artist_trigger),
-    ('weather_flip', weather_flip_trigger),
-    ('late_night', late_night_trigger),
+    ('class_soon',      has_class_soon_trigger),
+    ('new_artist',      new_artist_trigger),
+    ('session',         session_trigger),
+    ('weather_flip',    weather_flip_trigger),
+    ('late_night',      late_night_trigger),
     ('pattern_surface', pattern_surface_trigger),
-    ('open_thread', open_thread_trigger),
+    ('open_thread',     open_thread_trigger),
 ]
