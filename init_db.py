@@ -107,6 +107,15 @@ def setup_database():
         )
     """)
 
+    # 11. Presence Log: Phone home/away state changes from network radar
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS presence_log (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            event     TEXT NOT NULL
+        )
+    """)
+
     # Add column migrations for user_facts
     for sql in [
         "ALTER TABLE user_facts ADD COLUMN source TEXT DEFAULT 'unknown'",
