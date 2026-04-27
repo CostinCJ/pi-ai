@@ -116,6 +116,15 @@ def setup_database():
         )
     """)
 
+    # 12. Session Snapshot: top 5 laptop apps by RAM from telemetry daemon
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS session_snapshot (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            apps      TEXT NOT NULL
+        )
+    """)
+
     # Add column migrations for user_facts
     for sql in [
         "ALTER TABLE user_facts ADD COLUMN source TEXT DEFAULT 'unknown'",
