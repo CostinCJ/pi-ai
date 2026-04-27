@@ -20,7 +20,7 @@ def _validate(payload):
     for app in apps:
         if not isinstance(app.get('name'), str):
             return False
-        if not isinstance(app.get('ram_mb'), int):
+        if not isinstance(app.get('ram_mb'), int) or isinstance(app.get('ram_mb'), bool):
             return False
     return True
 

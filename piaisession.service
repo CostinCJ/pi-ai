@@ -1,9 +1,5 @@
-
-
-
-
 [Unit]
-Description=Pi AI Session Snaphot Reciever
+Description=Pi AI Session Snapshot Receiver
 After=network.target
 
 [Service]

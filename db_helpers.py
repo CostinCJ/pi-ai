@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from datetime import datetime, timedelta
 from config import DB_PATH
@@ -211,12 +212,11 @@ def get_last_presence_event():
 
 
 def log_session_snapshot(apps):
-    import json as _json
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO session_snapshot (timestamp, apps) VALUES (?, ?)",
-            (ts, _json.dumps(apps))
+            (ts, json.dumps(apps))
         )
         conn.execute(
             "DELETE FROM session_snapshot WHERE id NOT IN "
@@ -225,15 +225,13 @@ def log_session_snapshot(apps):
 
 
 def get_latest_session_snapshot():
-    import json as _json
-    from datetime import datetime as _dt, timedelta as _td
     with get_conn() as conn:
         row = conn.execute(
             "SELECT apps, timestamp FROM session_snapshot ORDER BY id DESC LIMIT 1"
         ).fetchone()
     if not row:
         return None
-    ts = _dt.strptime(row[1], "%Y-%m-%d %H:%M:%S")
-    if (_dt.now() - ts).total_seconds() > 300:
+    ts = datetime.strptime(row[1], "%Y-%m-%d %H:%M:%S")
+    if (datetime.now() - ts).total_seconds() > 300:
         return None
-    return _json.loads(row[0])
+    return json.loads(row[0])

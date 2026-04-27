@@ -1,9 +1,11 @@
 import json
 import logging
+import re
 import time
 import psutil
 import requests
 
+# Keep in sync with config.py TAILSCALE_IP and SESSION_SERVER_PORT on the Pi
 SESSION_SERVER_URL = 'http://100.64.0.1:8765/session'
 
 SYSTEM_PROCESSES = {
@@ -37,7 +39,7 @@ def get_top_apps():
             ram_mb = proc.info['memory_info'].rss // (1024 * 1024)
             if ram_mb < 1:
                 continue
-            clean_name = name.replace('.exe', '').replace('.EXE', '').strip()
+            clean_name = re.sub(r'\.exe$', '', name, flags=re.IGNORECASE).strip()
             procs.append({'name': clean_name, 'ram_mb': ram_mb})
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
