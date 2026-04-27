@@ -17,4 +17,7 @@ SPOTIFY_REDIRECT_URI  = 'http://127.0.0.1:8888/callback'
 
 LAPTOP_MAC = 'AA-BB-CC-DD-EE-FF'
 
-PHONE_MAC = '<your-phone-mac>'  # e.g. 'aa:bb:cc:dd:ee:ff' — lowercase, colon-separated
+PHONE_MAC = 'aa:bb:cc:dd:ee:ff'
+
+TAILSCALE_IP = '100.64.0.1'     # Pi's Tailscale IPv4 address
+SESSION_SERVER_PORT = 8765
