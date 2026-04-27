@@ -11,6 +11,13 @@ OLLAMA_OPTIONS_CHAT  = {"temperature": 0.7, "top_p": 0.8, "top_k": 20, "num_ctx"
 OLLAMA_OPTIONS_THINK = {"temperature": 0.7, "top_p": 0.8, "top_k": 20, "num_ctx": 4096, "num_predict": 80}
 
 
+def _format_session(snapshot):
+    if not snapshot:
+        return None
+    parts = [f"{app['name']} ({app['ram_mb']}MB)" for app in snapshot]
+    return "Session: " + ", ".join(parts)
+
+
 def _build_context_line(user_message=""):
     parts = []
     facts = db_helpers.get_user_facts(limit=5)
@@ -24,6 +31,9 @@ def _build_context_line(user_message=""):
         patterns = db_helpers.get_recent_patterns()
         if patterns and "no new" not in patterns:
             parts.append(f"Patterns: {patterns[:200]}")
+    session = _format_session(db_helpers.get_latest_session_snapshot())
+    if session:
+        parts.append(session)
     return " | ".join(parts) if parts else ""
 
 
@@ -39,6 +49,9 @@ def _build_proactive_context():
     if spotify and "unavailable" not in spotify.lower():
         clean_spotify = spotify.replace("Recent tracks: ", "")
         parts.append(clean_spotify[:200])
+    session = _format_session(db_helpers.get_latest_session_snapshot())
+    if session:
+        parts.append(session)
     return " | ".join(parts) if parts else ""
 
 

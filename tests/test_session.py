@@ -106,3 +106,47 @@ def test_session_trigger_no_refire_same_day(fake_db):
          patch("triggers.db_helpers.get_latest_session_snapshot", return_value=apps):
         fired, ctx = session_trigger()
     assert fired is False
+
+
+# ---------------------------------------------------------------------------
+# brain.py — session snapshot injection
+# ---------------------------------------------------------------------------
+
+import brain
+
+
+BRAIN_APPS = [
+    {"name": "League of Legends", "ram_mb": 823},
+    {"name": "Discord",           "ram_mb": 347},
+    {"name": "chrome",            "ram_mb": 198},
+]
+
+
+def test_build_context_includes_session_when_fresh(fake_db):
+    with patch("brain.db_helpers.get_latest_session_snapshot", return_value=BRAIN_APPS), \
+         patch("brain.db_helpers.get_user_facts", return_value="(no specific facts stored yet)"), \
+         patch("brain.spotify_sync.get_recent_tracks", return_value="unavailable"), \
+         patch("brain.db_helpers.get_recent_patterns", return_value="(no new patterns observed)"):
+        ctx = brain._build_context_line("hey")
+    assert "Session:" in ctx
+    assert "League of Legends" in ctx
+    assert "823MB" in ctx
+
+
+def test_build_context_skips_session_when_none(fake_db):
+    with patch("brain.db_helpers.get_latest_session_snapshot", return_value=None), \
+         patch("brain.db_helpers.get_user_facts", return_value="(no specific facts stored yet)"), \
+         patch("brain.spotify_sync.get_recent_tracks", return_value="unavailable"), \
+         patch("brain.db_helpers.get_recent_patterns", return_value="(no new patterns observed)"):
+        ctx = brain._build_context_line("hey")
+    assert "Session:" not in ctx
+
+
+def test_build_proactive_context_includes_session_when_fresh(fake_db):
+    with patch("brain.db_helpers.get_latest_session_snapshot", return_value=BRAIN_APPS), \
+         patch("brain.db_helpers.get_user_facts", return_value="(no specific facts stored yet)"), \
+         patch("brain.spotify_sync.get_recent_tracks", return_value="unavailable"), \
+         patch("brain.db_helpers.get_recent_patterns", return_value="(no new patterns observed)"):
+        ctx = brain._build_proactive_context()
+    assert "Session:" in ctx
+    assert "Discord" in ctx
