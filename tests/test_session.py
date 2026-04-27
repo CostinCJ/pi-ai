@@ -150,3 +150,42 @@ def test_build_proactive_context_includes_session_when_fresh(fake_db):
         ctx = brain._build_proactive_context()
     assert "Session:" in ctx
     assert "Discord" in ctx
+
+
+# ---------------------------------------------------------------------------
+# session_server — _validate
+# ---------------------------------------------------------------------------
+
+def _get_validate():
+    import session_server
+    return session_server._validate
+
+def test_validate_accepts_valid_payload():
+    _validate = _get_validate()
+    payload = {"apps": [{"name": "Discord", "ram_mb": 347}]}
+    assert _validate(payload) is True
+
+
+def test_validate_rejects_missing_apps_key():
+    _validate = _get_validate()
+    assert _validate({"data": []}) is False
+
+
+def test_validate_rejects_empty_apps_list():
+    _validate = _get_validate()
+    assert _validate({"apps": []}) is False
+
+
+def test_validate_rejects_missing_name():
+    _validate = _get_validate()
+    assert _validate({"apps": [{"ram_mb": 100}]}) is False
+
+
+def test_validate_rejects_non_int_ram():
+    _validate = _get_validate()
+    assert _validate({"apps": [{"name": "Discord", "ram_mb": "347"}]}) is False
+
+
+def test_validate_rejects_non_list_apps():
+    _validate = _get_validate()
+    assert _validate({"apps": "Discord"}) is False
