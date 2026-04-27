@@ -17,9 +17,9 @@ SYSTEM_PROCESSES = {
     'sihost.exe', 'ctfmon.exe', 'conhost.exe', 'dllhost.exe',
     'msmpeng.exe', 'nissrv.exe', 'securityhealthservice.exe',
     'wmiprvse.exe', 'textinputhost.exe', 'applicationframehost.exe',
-    'backgroundtaskhost.exe', 'memory compression', 'sppsvc.exe',
-    'dashost.exe', 'wudfhost.exe', 'widgetservice.exe', 'widgets.exe',
-    'explorer.exe',
+    'backgroundtaskhost.exe', 'memory compression', 'memcompression',
+    'sppsvc.exe', 'dashost.exe', 'wudfhost.exe', 'widgetservice.exe',
+    'widgets.exe', 'explorer.exe',
 }
 
 logging.basicConfig(
@@ -30,7 +30,7 @@ logging.basicConfig(
 
 
 def get_top_apps():
-    procs = []
+    totals = {}
     for proc in psutil.process_iter(['name', 'memory_info']):
         try:
             name = proc.info['name'] or ''
@@ -40,9 +40,10 @@ def get_top_apps():
             if ram_mb < 1:
                 continue
             clean_name = re.sub(r'\.exe$', '', name, flags=re.IGNORECASE).strip()
-            procs.append({'name': clean_name, 'ram_mb': ram_mb})
+            totals[clean_name] = totals.get(clean_name, 0) + ram_mb
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
+    procs = [{'name': n, 'ram_mb': r} for n, r in totals.items()]
     procs.sort(key=lambda x: x['ram_mb'], reverse=True)
     return procs[:5]
 

@@ -248,3 +248,29 @@ def test_get_top_apps_strips_exe_extension():
     with patch('session_daemon.psutil.process_iter', return_value=procs):
         result = session_daemon.get_top_apps()
     assert result[0]['name'] == 'Discord'
+
+
+def test_get_top_apps_aggregates_multi_process_apps():
+    procs = [
+        _make_proc('Spotify.exe', 300 * 1024 * 1024),
+        _make_proc('Spotify.exe', 250 * 1024 * 1024),
+        _make_proc('Discord.exe', 100 * 1024 * 1024),
+    ]
+    with patch('session_daemon.psutil.process_iter', return_value=procs):
+        result = session_daemon.get_top_apps()
+    names = [a['name'] for a in result]
+    assert names.count('Spotify') == 1
+    spotify = next(a for a in result if a['name'] == 'Spotify')
+    assert spotify['ram_mb'] == 550
+
+
+def test_get_top_apps_filters_memcompression():
+    procs = [
+        _make_proc('MemCompression', 216 * 1024 * 1024),
+        _make_proc('Discord.exe',    347 * 1024 * 1024),
+    ]
+    with patch('session_daemon.psutil.process_iter', return_value=procs):
+        result = session_daemon.get_top_apps()
+    names = [a['name'] for a in result]
+    assert 'MemCompression' not in names
+    assert 'Discord' in names
