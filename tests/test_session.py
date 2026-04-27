@@ -189,3 +189,62 @@ def test_validate_rejects_non_int_ram():
 def test_validate_rejects_non_list_apps():
     _validate = _get_validate()
     assert _validate({"apps": "Discord"}) is False
+
+
+# ---------------------------------------------------------------------------
+# session_daemon — get_top_apps (filtering + ranking logic)
+# ---------------------------------------------------------------------------
+
+from unittest.mock import MagicMock
+import session_daemon
+
+
+def _make_proc(name, rss_bytes):
+    p = MagicMock()
+    p.info = {
+        'name': name,
+        'memory_info': MagicMock(rss=rss_bytes),
+    }
+    return p
+
+
+def test_get_top_apps_strips_system_processes():
+    procs = [
+        _make_proc('svchost.exe',        500 * 1024 * 1024),
+        _make_proc('Discord.exe',        347 * 1024 * 1024),
+        _make_proc('msmpeng.exe',        400 * 1024 * 1024),
+        _make_proc('LeagueClient.exe',   823 * 1024 * 1024),
+    ]
+    with patch('session_daemon.psutil.process_iter', return_value=procs):
+        result = session_daemon.get_top_apps()
+    names = [a['name'] for a in result]
+    assert 'svchost' not in names
+    assert 'msmpeng' not in names
+    assert 'LeagueClient' in names
+    assert 'Discord' in names
+
+
+def test_get_top_apps_returns_max_5():
+    procs = [_make_proc(f'App{i}.exe', (600 - i) * 1024 * 1024) for i in range(10)]
+    with patch('session_daemon.psutil.process_iter', return_value=procs):
+        result = session_daemon.get_top_apps()
+    assert len(result) <= 5
+
+
+def test_get_top_apps_sorted_by_ram_descending():
+    procs = [
+        _make_proc('Discord.exe',  200 * 1024 * 1024),
+        _make_proc('Spotify.exe',  500 * 1024 * 1024),
+        _make_proc('chrome.exe',   350 * 1024 * 1024),
+    ]
+    with patch('session_daemon.psutil.process_iter', return_value=procs):
+        result = session_daemon.get_top_apps()
+    assert result[0]['name'] == 'Spotify'
+    assert result[0]['ram_mb'] == 500
+
+
+def test_get_top_apps_strips_exe_extension():
+    procs = [_make_proc('Discord.exe', 347 * 1024 * 1024)]
+    with patch('session_daemon.psutil.process_iter', return_value=procs):
+        result = session_daemon.get_top_apps()
+    assert result[0]['name'] == 'Discord'
