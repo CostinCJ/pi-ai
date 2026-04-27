@@ -80,3 +80,31 @@ def test_home_arrival_fires_no_previous_event_then_away(fake_db):
     assert fired is False
     last = db_helpers.get_last_presence_event()
     assert last["event"] == "home"
+
+
+import autonomy
+
+
+def test_presence_check_sends_message_on_arrival(fake_db):
+    """presence_check must phrase using PERSONA system prompt and send when trigger fires."""
+    captured = {}
+
+    def fake_chat_with_retry(messages, options=None, timeout=60, retry_hint=None):
+        captured["messages"] = messages
+        return "back already?", True
+
+    with patch("autonomy.home_arrival_trigger",
+               return_value=(True, "user just got home at 01:34, was out for 1h 12min")), \
+         patch("autonomy.chat_with_retry", fake_chat_with_retry), \
+         patch("autonomy.send_telegram_message") as mock_send, \
+         patch("autonomy.db_helpers.log_message"), \
+         patch("autonomy.db_helpers.mark_proactive_attempted"), \
+         patch("autonomy.db_helpers.log_proactive"):
+        autonomy.presence_check()
+
+    assert mock_send.call_count == 1
+    assert mock_send.call_args[0][0] == "back already?"
+    msgs = captured["messages"]
+    assert msgs[0]["role"] == "system"
+    assert "Lache" in msgs[0]["content"]
+    assert "01:34" in msgs[1]["content"] or "1h 12min" in msgs[1]["content"]

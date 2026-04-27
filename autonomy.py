@@ -5,7 +5,7 @@ from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 import db_helpers
 from config import TELEGRAM_TOKEN, CHAT_ID
-from triggers import ALL_TRIGGERS
+from triggers import ALL_TRIGGERS, home_arrival_trigger
 from llm import chat_with_retry
 from persona import PERSONA
 
@@ -83,9 +83,56 @@ def heartbeat():
     logging.info(f"tick: sent trigger={fired_type} latency_ms={latency}")
 
 
+def presence_check():
+    t0 = _time.time()
+    try:
+        should_speak, context_str = home_arrival_trigger()
+    except Exception as e:
+        logging.error(f"presence_check trigger error: {e}")
+        return
+
+    if not should_speak:
+        return
+
+    phrasing_messages = [
+        {"role": "system", "content": (
+            f"{PERSONA}\n\n"
+            "You will be given a one-line idea. Rephrase it in Lache's voice. "
+            "Output ONE casual lowercase sentence, max 20 words. No emojis, "
+            "no metaphors, no compliments, no follow-up explanation. If the "
+            "idea is empty, reply with the literal word SILENCE."
+        )},
+        {"role": "user", "content": context_str},
+    ]
+    try:
+        message, ok = chat_with_retry(
+            phrasing_messages,
+            {"temperature": 0.7, "num_predict": 60},
+            timeout=60,
+        )
+    except Exception as e:
+        logging.error(f"LLM phrasing failed for home_arrival: {e}")
+        return
+
+    if not ok or not message or message.strip().upper() == "SILENCE":
+        latency = int((_time.time() - t0) * 1000)
+        logging.info(f"presence_check: silence latency_ms={latency}")
+        db_helpers.mark_proactive_attempted('home_arrival', context_str[:100])
+        return
+
+    db_helpers.log_message('ai', message)
+    db_helpers.mark_proactive_attempted('home_arrival', context_str[:100])
+    db_helpers.log_proactive('home_arrival', context_str[:100], message)
+    send_telegram_message(message)
+
+    latency = int((_time.time() - t0) * 1000)
+    logging.info(f"presence_check: sent home_arrival latency_ms={latency}")
+
+
 if __name__ == '__main__':
     scheduler = BackgroundScheduler()
     scheduler.add_job(heartbeat, 'interval', minutes=10)
+    scheduler.add_job(presence_check, 'interval', minutes=2)
     scheduler.start()
     try:
         while True:
