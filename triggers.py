@@ -4,6 +4,7 @@ import db_helpers
 import schedule as uni_schedule
 import spotify_sync
 import weather_sync
+from network_radar import phone_is_home
 
 
 def has_class_soon_trigger():
@@ -105,6 +106,40 @@ def open_thread_trigger():
     thread_id, description = rows[0]
     db_helpers.update_thread_referenced(thread_id)
     return True, f"yo, did you ever {description}?"
+
+
+def home_arrival_trigger():
+    is_home = phone_is_home()
+    if is_home is None:
+        return False, ""
+
+    last = db_helpers.get_last_presence_event()
+    now = datetime.now()
+
+    if is_home:
+        if last is None or last["event"] == "away":
+            if last is not None:
+                away_since = datetime.strptime(last["timestamp"], "%Y-%m-%d %H:%M:%S")
+                minutes_away = int((now - away_since).total_seconds() / 60)
+            else:
+                minutes_away = 0
+
+            db_helpers.log_presence_event("home")
+
+            if minutes_away < 25:
+                return False, ""
+
+            hours = minutes_away // 60
+            mins = minutes_away % 60
+            duration_str = f"{hours}h {mins}min" if hours > 0 else f"{mins}min"
+            arrival_time = now.strftime("%H:%M")
+            context = f"user just got home at {arrival_time}, was out for {duration_str}"
+            return True, context
+        return False, ""
+    else:
+        if last is None or last["event"] == "home":
+            db_helpers.log_presence_event("away")
+        return False, ""
 
 
 ALL_TRIGGERS = [
