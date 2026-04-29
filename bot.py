@@ -494,6 +494,30 @@ async def cmd_note(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"noted: {text}")
 
 
+async def cmd_remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update):
+        return
+    args = context.args
+    if not args or len(args) < 2:
+        await update.message.reply_text("usage: /remind HH:MM <text>")
+        return
+    time_str = args[0]
+    text = " ".join(args[1:]).strip()
+    from tools import set_reminder
+    try:
+        hour, minute = map(int, time_str.split(":"))
+        now = datetime.now()
+        fire_at = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if fire_at <= now:
+            fire_at += timedelta(days=1)
+        result = set_reminder(text, fire_at.isoformat())
+        await update.message.reply_text(result)
+    except (ValueError, AttributeError):
+        await update.message.reply_text(
+            "couldn't parse time — use HH:MM format, e.g. /remind 22:00 call mom"
+        )
+
+
 async def cmd_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update):
         return
@@ -553,6 +577,7 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler("week", cmd_week))
     app.add_handler(CommandHandler("laptop", cmd_laptop))
     app.add_handler(CommandHandler("note", cmd_note))
+    app.add_handler(CommandHandler("remind", cmd_remind))
     app.add_handler(CommandHandler("export", cmd_export))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("poweron", cmd_poweron))
