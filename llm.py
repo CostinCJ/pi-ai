@@ -3,8 +3,13 @@ import json
 import re
 import os
 import inspect
-import requests
-from config import OLLAMA_CHAT_URL, MODEL
+import groq as _groq
+from config import (
+    GROQ_API_KEY, GROQ_MODEL, LOG_DIR, LLM_LOG_MAX_BYTES,
+    IN_CHARACTER_MAX_CHARS, IN_CHARACTER_MAX_CHARS_LONG,
+)
+
+_client = _groq.Groq(api_key=GROQ_API_KEY)
 
 BANNED_PHRASES = [
     "chill of cluj", "whispers of", "silence of the night",
@@ -16,46 +21,68 @@ BANNED_PHRASES = [
     "masterpiece", "the air is crisp", "alive with energy",
     "you're doing great", "just like the city", "today is perfect",
     "playlist is a", "as your personal", "personal ai",
-    "i'm here to", "i am here to",
+    "i'm here to", "i am here to", "i'm just here to", "just here to",
+    "here to listen", "what's on your mind", "what is on your mind",
 ]
 
-LOG_PATH = '/home/pi/pi-ai/llm.log'
-LOG_MAX_BYTES = 5 * 1024 * 1024  # 5MB
+LOG_PATH = os.path.join(str(LOG_DIR), 'llm.log')
+
 
 def _rotate_log():
-    if os.path.exists(LOG_PATH) and os.path.getsize(LOG_PATH) > LOG_MAX_BYTES:
+    if os.path.exists(LOG_PATH) and os.path.getsize(LOG_PATH) > LLM_LOG_MAX_BYTES:
         with open(LOG_PATH, 'w'):
             pass
 
-def _log(caller, latency_ms, success):
+
+def _log(caller, latency_ms, success, extra=""):
     _rotate_log()
     ts = time.strftime('%Y-%m-%d %H:%M:%S')
     status = 'ok' if success else 'fail'
+    line = f"{ts} caller={caller} latency_ms={latency_ms:.0f} status={status}"
+    if extra:
+        line += f" {extra}"
     with open(LOG_PATH, 'a') as f:
-        f.write(f"{ts} caller={caller} latency_ms={latency_ms:.0f} status={status}\n")
+        f.write(line + "\n")
+
 
 def _clean(text):
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    text = re.sub(r"</?think>", "", text)  # strip orphaned tags
     text = re.sub(r"\*[^*]+\*", "", text)
-    text = re.sub(r"[\U0001F300-\U0001FAFF\U00002600-\U000027BF]", "", text)
     text = re.sub(r"^Lache:\s*", "", text, flags=re.IGNORECASE)
     return text.strip()
+
 
 def is_acceptable(text):
     lower = text.lower()
     return not any(b in lower for b in BANNED_PHRASES)
 
-def is_in_character(text):
+
+THINKING_LEAK_PHRASES = [
+    "the user asked", "i need to respond", "i should check",
+    "i should respond", "let me think", "okay, let's see",
+    "first, i should", "the rules say", "respond appropriately",
+]
+
+
+def is_in_character(text, max_chars=None):
     """Structural style filter — catches poetry/sycophancy patterns the
-    blocklist misses. Returns True if the text looks like Lache."""
+    blocklist misses. Returns True if the text looks like Lache.
+    `max_chars` defaults to IN_CHARACTER_MAX_CHARS; callers can pass
+    IN_CHARACTER_MAX_CHARS_LONG for context-warranted long replies."""
     if not text or not text.strip():
         return False
     s = text.strip()
-    if len(s) > 220:
+    cap = max_chars if max_chars is not None else IN_CHARACTER_MAX_CHARS
+    if len(s) > cap:
         return False
-    if s.count(".") + s.count("!") + s.count("?") > 3:
+    sentence_cap = 3 if cap <= IN_CHARACTER_MAX_CHARS else 6
+    if s.count(".") + s.count("!") + s.count("?") > sentence_cap:
         return False
     if s.count("—") >= 2:
+        return False
+    lower = s.lower()
+    if any(p in lower for p in THINKING_LEAK_PHRASES):
         return False
     words = [w for w in s.split() if w.isalpha()]
     if len(words) >= 6:
@@ -64,33 +91,45 @@ def is_in_character(text):
             return False
     return is_acceptable(s)
 
+
 def chat(messages, options=None, timeout=60):
     caller = inspect.stack()[1].function
     if options is None:
         options = {}
     t0 = time.time()
+
+    kwargs = {}
+    if 'temperature' in options:
+        kwargs['temperature'] = options['temperature']
+    if 'top_p' in options:
+        kwargs['top_p'] = options['top_p']
+    kwargs['max_tokens'] = options.get('num_predict') or options.get('max_tokens') or 150
+
     for attempt in range(2):
         try:
-            r = requests.post(OLLAMA_CHAT_URL, json={
-                "model": MODEL, "stream": False,
-                "messages": messages, "options": options
-            }, timeout=timeout)
-            content = r.json().get("message", {}).get("content", "").strip()
+            completion = _client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=messages,
+                timeout=timeout,
+                **kwargs,
+            )
+            content = completion.choices[0].message.content or ""
             result = _clean(content)
             _log(caller, (time.time() - t0) * 1000, True)
             return result
-        except requests.exceptions.ConnectionError:
+        except _groq.APIConnectionError as e:
             if attempt == 0:
                 time.sleep(2)
                 continue
-            _log(caller, (time.time() - t0) * 1000, False)
+            _log(caller, (time.time() - t0) * 1000, False, f"err=APIConnectionError")
             raise
-        except requests.exceptions.Timeout:
-            _log(caller, (time.time() - t0) * 1000, False)
+        except _groq.APITimeoutError:
+            _log(caller, (time.time() - t0) * 1000, False, "err=APITimeoutError")
             raise
-        except Exception:
-            _log(caller, (time.time() - t0) * 1000, False)
+        except Exception as e:
+            _log(caller, (time.time() - t0) * 1000, False, f"err={type(e).__name__}")
             raise
+
 
 def chat_json(messages, options=None, schema_keys=None, timeout=60):
     caller = inspect.stack()[1].function
@@ -105,20 +144,20 @@ def chat_json(messages, options=None, schema_keys=None, timeout=60):
                     return None
         return data
     except Exception as e:
-        _log(caller, 0, False)
+        _log(caller, 0, False, f"chat_json_err={type(e).__name__}")
         with open(LOG_PATH, 'a') as f:
             f.write(f"  chat_json error: {type(e).__name__}: {e}\n")
         return None
 
-def chat_with_retry(messages, options=None, timeout=60, retry_hint=None):
+
+def chat_with_retry(messages, options=None, timeout=60, retry_hint=None, max_chars=None):
     """Generate, validate against `is_in_character`, and retry once with a
     corrective hint if the first try fails. Returns (text, ok_flag).
 
-    ok_flag is False when both attempts failed — caller is responsible for
-    surfacing an in-character fallback instead of the (possibly empty) text.
+    `max_chars` lets callers loosen the in-character cap for long-form replies.
     """
     first = chat(messages, options, timeout)
-    if is_in_character(first):
+    if is_in_character(first, max_chars=max_chars):
         return first, True
 
     import db_helpers as _db
@@ -127,15 +166,14 @@ def chat_with_retry(messages, options=None, timeout=60, retry_hint=None):
     hint = retry_hint or (
         "your previous draft was either empty or too poetic. write one short, "
         "lowercase, casual sentence in lache's voice — no metaphors, no "
-        "compliments, no marketing copy. if you have nothing real to say, "
-        "ask a short follow-up question."
+        "compliments, no marketing copy. just acknowledge or react briefly."
     )
     retry_messages = list(messages) + [
         {"role": "assistant", "content": first or "(empty)"},
         {"role": "user", "content": hint},
     ]
     second = chat(retry_messages, options, timeout)
-    if is_in_character(second):
+    if is_in_character(second, max_chars=max_chars):
         _db.log_quality_event('retry_succeeded', second[:200])
         return second, True
     _db.log_quality_event('retry_failed', second[:200])

@@ -1,9 +1,21 @@
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
+from config import SAPT1_ANCHOR
 
-# Week parity: săpt 1 = odd ISO week, săpt 2 = even ISO week
-# If your schedule feels flipped, change this to: week % 2 == 0
+
+def _anchor_date():
+    """Returns the configured săpt-1 reference date as a `date`."""
+    return datetime.strptime(SAPT1_ANCHOR, "%Y-%m-%d").date()
+
+
 def is_sapt1():
-    return datetime.now().isocalendar()[1] % 2 == 0
+    """Anchor-based parity. Each ISO week increments parity by 1."""
+    today = date.today()
+    anchor = _anchor_date()
+    today_iso = today.isocalendar()
+    anchor_iso = anchor.isocalendar()
+    delta_weeks = (today_iso[0] - anchor_iso[0]) * 52 + (today_iso[1] - anchor_iso[1])
+    return delta_weeks % 2 == 0
+
 
 TIMETABLE = {
     0: [  # Luni
@@ -29,52 +41,62 @@ TIMETABLE = {
     ],
 }
 
+
+def _slot_active(slot, sapt1):
+    if slot["every"]:
+        return True
+    if slot["week"] == 1 and sapt1:
+        return True
+    if slot["week"] == 2 and not sapt1:
+        return True
+    return False
+
+
 def get_todays_classes():
     day = datetime.now().weekday()
     slots = TIMETABLE.get(day, [])
     if not slots:
         return "No classes today."
-
     sapt1 = is_sapt1()
-    active = []
-    for s in slots:
-        if s["every"]:
-            active.append(s)
-        elif s["week"] == 1 and sapt1:
-            active.append(s)
-        elif s["week"] == 2 and not sapt1:
-            active.append(s)
-
+    active = [s for s in slots if _slot_active(s, sapt1)]
     if not active:
         return "No classes today (off week)."
-
     parts = [f"{s['subject']} {s['start']}:00-{s['end']}:00 ({s['room']})" for s in active]
     return "Classes today: " + ", ".join(parts)
 
+
 def get_next_class():
     """Returns the next upcoming class today, or None if none left."""
-    day = datetime.now().weekday()
-    now_hour = datetime.now().hour
+    now = datetime.now()
+    day = now.weekday()
     slots = TIMETABLE.get(day, [])
     sapt1 = is_sapt1()
-
     for s in sorted(slots, key=lambda x: x["start"]):
-        if s["start"] <= now_hour:
+        slot_dt = now.replace(hour=s["start"], minute=0, second=0, microsecond=0)
+        if slot_dt <= now:
             continue
-        if s["every"]:
-            return s
-        if s["week"] == 1 and sapt1:
-            return s
-        if s["week"] == 2 and not sapt1:
+        if _slot_active(s, sapt1):
             return s
     return None
 
+
 def has_class_soon(within_hours=2):
-    """Returns a string like 'TRSI curs in ~1h' or None."""
+    """Returns a string like 'TRSI curs in ~45min' or None."""
     next_class = get_next_class()
     if not next_class:
         return None
-    hours_away = next_class["start"] - datetime.now().hour
-    if 0 < hours_away <= within_hours:
-        return f"{next_class['subject']} in ~{hours_away}h ({next_class['room']})"
-    return None
+    now = datetime.now()
+    slot_dt = now.replace(hour=next_class["start"], minute=0, second=0, microsecond=0)
+    delta = slot_dt - now
+    if delta.total_seconds() <= 0:
+        return None
+    if delta > timedelta(hours=within_hours):
+        return None
+    minutes = int(delta.total_seconds() // 60)
+    if minutes < 60:
+        when = f"{minutes}min"
+    else:
+        h = minutes // 60
+        m = minutes % 60
+        when = f"{h}h" if m == 0 else f"{h}h{m}min"
+    return f"{next_class['subject']} in ~{when} ({next_class['room']})"

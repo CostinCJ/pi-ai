@@ -1,8 +1,32 @@
+import logging
+import os
+import time
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 import db_helpers
 from llm import chat_json
+from config import LOG_DIR, APP_LOG_MAX_BYTES, APP_LOG_BACKUPS
+
+_handler = RotatingFileHandler(
+    os.path.join(str(LOG_DIR), 'reflection.log'),
+    maxBytes=APP_LOG_MAX_BYTES, backupCount=APP_LOG_BACKUPS,
+)
+_handler.setFormatter(logging.Formatter('%(asctime)s %(message)s'))
+logging.basicConfig(level=logging.INFO, handlers=[_handler])
 
 MAX_LOG_CHARS = 6000
+
+
+def _retry(fn, attempts=3, base_delay=10, label="op"):
+    for i in range(attempts):
+        try:
+            return fn()
+        except Exception as e:
+            wait = base_delay * (2 ** i)
+            logging.error(f"{label} attempt {i+1}/{attempts} failed: {type(e).__name__}: {e}; sleeping {wait}s")
+            if i + 1 < attempts:
+                time.sleep(wait)
+    return None
 
 
 def get_weekly_logs():
@@ -42,11 +66,10 @@ def _close_resolved_threads(closed_descriptions):
 def run_reflection():
     logs = get_weekly_logs()
     if not logs:
-        print("No logs this week. Skipping reflection.")
+        logging.info("No logs this week. Skipping reflection.")
         return
 
     current_profile = db_helpers.get_latest_profile()
-
     signals = db_helpers.get_daily_signals(days=7)
     signals_text = ""
     if signals:
@@ -77,18 +100,22 @@ Output strictly as JSON:
 }}"""
 
     messages = [
-        {"role": "system", "content": "/no_think\nYou are a precise JSON extractor. Output only valid JSON."},
+        {"role": "system", "content": "You are a precise JSON extractor. Output only valid JSON."},
         {"role": "user", "content": prompt}
     ]
-    data = chat_json(messages, {"temperature": 0.3, "format": "json"},
-                     schema_keys=["updated_profile", "patterns"], timeout=180)
+    data = _retry(
+        lambda: chat_json(messages, {"temperature": 0.3, "format": "json"},
+                          schema_keys=["updated_profile", "patterns"], timeout=180),
+        label="reflection_main"
+    )
     if data is None:
-        print("Reflection LLM call failed. Skipping.")
+        logging.error("Reflection LLM call failed after retries. Skipping.")
         return
 
     save_reflection(data.get("updated_profile", current_profile), data.get("patterns", []))
     _close_resolved_threads(data.get("closed_threads", []))
-    print("Reflection and patterns saved successfully.")
+    db_helpers.prune_long_lived_tables()
+    logging.info("Reflection and patterns saved successfully.")
 
 
 if __name__ == '__main__':

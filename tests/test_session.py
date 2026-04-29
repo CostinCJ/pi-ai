@@ -94,7 +94,8 @@ def test_session_trigger_fires_when_league_detected(fake_db):
     ]
     with patch("triggers.db_helpers.get_latest_session_snapshot", return_value=apps), \
          patch("triggers.db_helpers.was_proactive_attempted_today", return_value=False):
-        fired, ctx = session_trigger()
+        result = session_trigger()
+    fired, ctx = result[0], result[1]
     assert fired is True
     assert "league" in ctx.lower() or "League" in ctx
     assert "Discord" in ctx
@@ -274,3 +275,10 @@ def test_get_top_apps_filters_memcompression():
     names = [a['name'] for a in result]
     assert 'MemCompression' not in names
     assert 'Discord' in names
+
+
+def test_shutdown_listener_requires_shared_secret(monkeypatch):
+    monkeypatch.setattr(session_daemon, "SESSION_SHARED_SECRET", "")
+    with patch("session_daemon.HTTPServer") as server:
+        session_daemon._run_shutdown_server()
+    assert server.call_count == 0

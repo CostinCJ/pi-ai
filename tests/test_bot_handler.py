@@ -64,3 +64,9 @@ async def test_repeated_user_message_logs_quality_event(fake_db):
             "SELECT event_type FROM quality_log"
         ).fetchall()
     assert any(e[0] == "user_repeated" for e in events)
+
+
+def test_external_ok_treats_none_as_failure():
+    assert bot._external_ok(None) is False
+    assert bot._external_ok("Weather data unavailable.") is False
+    assert bot._external_ok("The current weather in Cluj-Napoca is 12.0C") is True

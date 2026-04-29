@@ -1,0 +1,14 @@
+[Unit]
+Description=Pi AI Telegram Listener
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/pi-ai
+ExecStart=/home/pi/pi-ai/venv/bin/python /home/pi/pi-ai/bot.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

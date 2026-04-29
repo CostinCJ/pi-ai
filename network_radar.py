@@ -13,6 +13,8 @@ def phone_is_home():
             ['sudo', 'arp-scan', '-l', '--quiet'],
             capture_output=True, text=True, timeout=15
         )
+        if result.returncode != 0:
+            return None
         return PHONE_MAC.lower() in result.stdout.lower()
     except Exception:
         return None

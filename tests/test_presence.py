@@ -1,5 +1,6 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import db_helpers
+import triggers as _triggers
 
 
 def test_get_last_presence_event_returns_none_when_empty(fake_db):
@@ -26,7 +27,8 @@ from triggers import home_arrival_trigger
 
 
 def _insert_presence(event, minutes_ago):
-    ts = (datetime.now() - timedelta(minutes=minutes_ago)).strftime("%Y-%m-%d %H:%M:%S")
+    # Match production: presence_log timestamps are stored in UTC (SQLite CURRENT_TIMESTAMP).
+    ts = (datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)).strftime("%Y-%m-%d %H:%M:%S")
     with db_helpers.get_conn() as conn:
         conn.execute(
             "INSERT INTO presence_log (event, timestamp) VALUES (?, ?)",
@@ -34,50 +36,88 @@ def _insert_presence(event, minutes_ago):
         )
 
 
+def _reset_debounce():
+    _triggers._recent_scans.clear()
+
+
 def test_home_arrival_fires_after_long_absence(fake_db):
+    _reset_debounce()
     _insert_presence("away", 35)
     with patch("triggers.phone_is_home", return_value=True):
-        fired, context = home_arrival_trigger()
+        result = home_arrival_trigger()
+    fired, context = result[0], result[1]
     assert fired is True
     assert "got home" in context
     assert "35min" in context or "34min" in context or "36min" in context  # ±1 min tolerance
 
 
 def test_home_arrival_no_fire_short_trip(fake_db):
+    _reset_debounce()
     _insert_presence("away", 10)
     with patch("triggers.phone_is_home", return_value=True):
-        fired, context = home_arrival_trigger()
-    assert fired is False
+        result = home_arrival_trigger()
+    assert result[0] is False
 
 
 def test_home_arrival_no_fire_scanner_failed(fake_db):
+    _reset_debounce()
     _insert_presence("away", 60)
     with patch("triggers.phone_is_home", return_value=None):
-        fired, context = home_arrival_trigger()
-    assert fired is False
+        result = home_arrival_trigger()
+    assert result[0] is False
 
 
-def test_home_arrival_logs_away_on_departure(fake_db):
+def test_home_arrival_logs_away_after_debounce(fake_db):
+    """Three consecutive misses should flip state to away."""
+    from config import AWAY_DEBOUNCE_SCANS
+    _reset_debounce()
     _insert_presence("home", 5)
     with patch("triggers.phone_is_home", return_value=False):
-        fired, _ = home_arrival_trigger()
-    assert fired is False
+        for _ in range(AWAY_DEBOUNCE_SCANS):
+            result = home_arrival_trigger()
+            assert result[0] is False
     last = db_helpers.get_last_presence_event()
     assert last["event"] == "away"
 
 
+def test_home_arrival_single_miss_does_not_flip(fake_db):
+    """A single missed scan must not log 'away' — protects against arp-scan flapping."""
+    _reset_debounce()
+    _insert_presence("home", 5)
+    with patch("triggers.phone_is_home", return_value=False):
+        result = home_arrival_trigger()
+    assert result[0] is False
+    last = db_helpers.get_last_presence_event()
+    assert last["event"] == "home"
+
+
+def test_home_arrival_miss_then_hit_no_flap(fake_db):
+    """miss → hit should not produce a fake away→home arrival message."""
+    _reset_debounce()
+    _insert_presence("home", 5)
+    with patch("triggers.phone_is_home", return_value=False):
+        home_arrival_trigger()
+    with patch("triggers.phone_is_home", return_value=True):
+        result = home_arrival_trigger()
+    assert result[0] is False
+    last = db_helpers.get_last_presence_event()
+    assert last["event"] == "home"
+
+
 def test_home_arrival_no_refire_when_already_home(fake_db):
+    _reset_debounce()
     _insert_presence("home", 5)
     with patch("triggers.phone_is_home", return_value=True):
-        fired, _ = home_arrival_trigger()
-    assert fired is False
+        result = home_arrival_trigger()
+    assert result[0] is False
 
 
 def test_home_arrival_fires_no_previous_event_then_away(fake_db):
     # No prior events: phone seen for first time → log home, don't fire (no away reference)
+    _reset_debounce()
     with patch("triggers.phone_is_home", return_value=True):
-        fired, _ = home_arrival_trigger()
-    assert fired is False
+        result = home_arrival_trigger()
+    assert result[0] is False
     last = db_helpers.get_last_presence_event()
     assert last["event"] == "home"
 

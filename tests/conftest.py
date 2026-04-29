@@ -1,4 +1,19 @@
+import os
 import pytest
+
+# Provide dummy env BEFORE config.py is imported so its required-env asserts
+# don't blow up tests. Real values come from .env on the Pi.
+_TEST_ENV = {
+    "GROQ_API_KEY": "test",
+    "TELEGRAM_TOKEN": "test",
+    "CHAT_ID": "123",
+    "OWM_API_KEY": "test",
+    "SPOTIFY_CLIENT_ID": "test",
+    "SPOTIFY_CLIENT_SECRET": "test",
+    "SAPT1_ANCHOR": "2026-04-27",
+}
+for k, v in _TEST_ENV.items():
+    os.environ.setdefault(k, v)
 
 
 @pytest.fixture
@@ -11,7 +26,7 @@ def fake_db(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DB_PATH", str(db_file))
     monkeypatch.setattr(db_helpers, "DB_PATH", str(db_file), raising=False)
     monkeypatch.setattr(init_db, "DB_PATH", str(db_file))
-    init_db.setup_database()  # creates all tables in db_file
+    init_db.setup_database()
     return str(db_file)
 
 

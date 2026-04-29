@@ -5,6 +5,7 @@ import network_radar
 def _mock_run(stdout):
     result = MagicMock()
     result.stdout = stdout
+    result.returncode = 0
     return result
 
 
@@ -26,6 +27,13 @@ def test_phone_is_home_false():
 
 def test_phone_is_home_none_on_exception():
     with patch("network_radar.subprocess.run", side_effect=Exception("not found")):
+        assert network_radar.phone_is_home() is None
+
+
+def test_phone_is_home_none_on_scan_failure():
+    result = _mock_run("")
+    result.returncode = 1
+    with patch("network_radar.subprocess.run", return_value=result):
         assert network_radar.phone_is_home() is None
 
 

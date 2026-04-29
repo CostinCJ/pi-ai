@@ -1,11 +1,31 @@
 import logging
+import os
+import time
 from datetime import datetime
-from config import DB_PATH
+from logging.handlers import RotatingFileHandler
 import db_helpers
 from llm import chat_json
+from config import LOG_DIR, APP_LOG_MAX_BYTES, APP_LOG_BACKUPS
 
-logging.basicConfig(filename='/home/pi/pi-ai/consolidation.log', level=logging.INFO,
-                    format='%(asctime)s %(message)s')
+_handler = RotatingFileHandler(
+    os.path.join(str(LOG_DIR), 'consolidation.log'),
+    maxBytes=APP_LOG_MAX_BYTES, backupCount=APP_LOG_BACKUPS,
+)
+_handler.setFormatter(logging.Formatter('%(asctime)s %(message)s'))
+logging.basicConfig(level=logging.INFO, handlers=[_handler])
+
+
+def _retry(fn, attempts=3, base_delay=10, label="op"):
+    """Retry with exponential backoff on any Exception. Returns fn() result or None."""
+    for i in range(attempts):
+        try:
+            return fn()
+        except Exception as e:
+            wait = base_delay * (2 ** i)
+            logging.error(f"{label} attempt {i+1}/{attempts} failed: {type(e).__name__}: {e}; sleeping {wait}s")
+            if i + 1 < attempts:
+                time.sleep(wait)
+    return None
 
 
 def _validate_realtime_facts():
@@ -19,7 +39,7 @@ def _validate_realtime_facts():
         return
     candidate_text = "\n".join(f"- {r[1]}" for r in candidates)
     messages = [
-        {"role": "system", "content": "/no_think\nYou are a precise JSON validator. Output only valid JSON."},
+        {"role": "system", "content": "You are a precise JSON validator. Output only valid JSON."},
         {"role": "user", "content": f"""Review these candidate facts extracted from conversation.
 Keep only clear, permanent personal facts. Reject anything vague or temporary.
 
@@ -28,7 +48,10 @@ Candidates:
 
 Reply as JSON: {{"keep": ["fact1", "fact2"], "reject": ["fact3"]}}"""}
     ]
-    data = chat_json(messages, {"temperature": 0.1}, schema_keys=["keep"], timeout=60)
+    data = _retry(
+        lambda: chat_json(messages, {"temperature": 0.1}, schema_keys=["keep"], timeout=60),
+        label="validate_realtime_facts"
+    )
     if not data:
         return
     keep_set = set(data.get("keep", []))
@@ -86,13 +109,16 @@ Output strictly as JSON:
 }}"""
 
     messages = [
-        {"role": "system", "content": "/no_think\nYou are a precise JSON extractor. Output only valid JSON."},
+        {"role": "system", "content": "You are a precise JSON extractor. Output only valid JSON."},
         {"role": "user", "content": prompt}
     ]
-    data = chat_json(messages, {"temperature": 0.2, "format": "json"},
-                     schema_keys=["facts", "summary"], timeout=120)
+    data = _retry(
+        lambda: chat_json(messages, {"temperature": 0.2, "format": "json"},
+                          schema_keys=["facts", "summary"], timeout=120),
+        label="consolidation_main"
+    )
     if data is None:
-        logging.error("Consolidation LLM call failed or returned invalid JSON. Skipping.")
+        logging.error("Consolidation LLM call failed after retries. Skipping.")
         return
 
     today = datetime.now().strftime('%Y-%m-%d')
@@ -135,6 +161,8 @@ Output strictly as JSON:
         logging.error(f"Consolidation DB write failed: {e}", exc_info=True)
 
     _validate_realtime_facts()
+    db_helpers.decay_realtime_facts()
+    db_helpers.prune_long_lived_tables()
 
 
 if __name__ == '__main__':

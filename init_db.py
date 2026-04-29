@@ -1,24 +1,31 @@
 import sqlite3
 import os
+from config import DB_PATH
 
-DB_PATH = '/home/pi/pi-ai/memory.db'
 
 def setup_database():
-    # Connect to SQLite (creates the file if it doesn't exist)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    # 1. Conversations: The raw dialogue history
+    # Concurrency: WAL allows multiple readers + one writer without
+    # journal-rollback contention. Set once; persists per-database.
+    try:
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+    except sqlite3.OperationalError:
+        pass
+
+    # 1. Conversations
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS conversations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        sender TEXT NOT NULL, -- 'user' or 'ai'
+        sender TEXT NOT NULL,
         message TEXT NOT NULL
     )
     ''')
 
-    # 2. User Facts: Concrete things it knows about you (Key/Value store)
+    # 2. User Facts
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS user_facts (
         fact_key TEXT PRIMARY KEY,
@@ -27,7 +34,7 @@ def setup_database():
     )
     ''')
 
-    # 3. Pattern Log: Inferred habits and behavioral drifts
+    # 3. Pattern Log
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS pattern_log (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,7 +43,7 @@ def setup_database():
     )
     ''')
 
-    # 4. Weekly Profile: The AI's synthesized understanding of you
+    # 4. Weekly Profile
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS weekly_profile (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,7 +52,7 @@ def setup_database():
     )
     ''')
 
-    # 5. Daily Signal: Mood, energy, topics, and summary for each day
+    # 5. Daily Signal
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS daily_signal (
         date TEXT PRIMARY KEY,
@@ -57,7 +64,7 @@ def setup_database():
     )
     ''')
 
-    # 6. Rolling Summary: Latest synthesized summary of ongoing interests
+    # 6. Rolling Summary
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS rolling_summary (
         id INTEGER PRIMARY KEY,
@@ -66,7 +73,7 @@ def setup_database():
     )
     ''')
 
-    # 7. Open Threads: Unresolved topics or questions to follow up on
+    # 7. Open Threads
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS open_threads (
         id INTEGER PRIMARY KEY,
@@ -77,7 +84,7 @@ def setup_database():
     )
     ''')
 
-    # 8. Proactive State: Key-value store for proactive engagement state
+    # 8. Proactive State
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS proactive_state (
         key TEXT PRIMARY KEY,
@@ -86,18 +93,21 @@ def setup_database():
     )
     ''')
 
-    # 9. Proactive Log: History of proactive messages and their triggers
+    # 9. Proactive Log
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS proactive_log (
         id INTEGER PRIMARY KEY,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         trigger_type TEXT,
         trigger_key TEXT,
-        message_sent TEXT
+        message_sent TEXT,
+        delivered INTEGER DEFAULT 1,
+        attempts INTEGER DEFAULT 1,
+        user_responded INTEGER DEFAULT 0
     )
     ''')
 
-    # 10. Quality Log: Telemetry for retry/fallback events
+    # 10. Quality Log
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS quality_log (
             id INTEGER PRIMARY KEY,
@@ -107,7 +117,7 @@ def setup_database():
         )
     """)
 
-    # 11. Presence Log: Phone home/away state changes from network radar
+    # 11. Presence Log
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS presence_log (
             id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -116,7 +126,7 @@ def setup_database():
         )
     """)
 
-    # 12. Session Snapshot: top 5 laptop apps by RAM from telemetry daemon
+    # 12. Session Snapshot
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS session_snapshot (
             id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -125,7 +135,7 @@ def setup_database():
         )
     """)
 
-    # Add column migrations for user_facts
+    # Migrations on user_facts
     for sql in [
         "ALTER TABLE user_facts ADD COLUMN source TEXT DEFAULT 'unknown'",
         "ALTER TABLE user_facts ADD COLUMN confidence REAL DEFAULT 1.0",
@@ -134,11 +144,23 @@ def setup_database():
         try:
             cursor.execute(sql)
         except sqlite3.OperationalError:
-            pass  # column already exists
+            pass
+
+    # Migrations on proactive_log (delivered/attempts/user_responded for retry+telemetry)
+    for sql in [
+        "ALTER TABLE proactive_log ADD COLUMN delivered INTEGER DEFAULT 1",
+        "ALTER TABLE proactive_log ADD COLUMN attempts INTEGER DEFAULT 1",
+        "ALTER TABLE proactive_log ADD COLUMN user_responded INTEGER DEFAULT 0",
+    ]:
+        try:
+            cursor.execute(sql)
+        except sqlite3.OperationalError:
+            pass
 
     conn.commit()
     conn.close()
     print(f"Brain initialized. Memory structure created at: {os.path.abspath(DB_PATH)}")
+
 
 if __name__ == '__main__':
     setup_database()

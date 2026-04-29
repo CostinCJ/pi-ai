@@ -11,7 +11,7 @@ def get_current_weather():
     url = f"http://api.openweathermap.org/data/2.5/weather?q={CITY}&appid={API_KEY}&units=metric"
     
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         data = response.json()
         
         if response.status_code == 200:
@@ -24,11 +24,11 @@ def get_current_weather():
             return summary
         else:
             print(f"Error {response.status_code}: {data.get('message', 'Unknown error')}")
-            return None
+            return "Weather data unavailable."
             
     except Exception as e:
         print(f"Failed to fetch weather: {e}")
-        return None
+        return "Weather data unavailable."
 
 def get_weather_change():
     url = f"http://api.openweathermap.org/data/2.5/weather?q={CITY}&appid={API_KEY}&units=metric"
@@ -67,4 +67,3 @@ def get_weather_change():
 
 if __name__ == '__main__':
     get_current_weather()
-

@@ -1,0 +1,42 @@
+name: tests
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install runtime deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install groq python-telegram-bot apscheduler requests \
+                      spotipy wakeonlan psutil python-dotenv
+
+      - name: Install dev deps
+        run: pip install -r requirements-dev.txt
+
+      - name: Provide test env
+        run: |
+          cat > .env <<'EOF'
+          GROQ_API_KEY=test
+          TELEGRAM_TOKEN=test
+          CHAT_ID=1
+          OWM_API_KEY=test
+          SPOTIFY_CLIENT_ID=test
+          SPOTIFY_CLIENT_SECRET=test
+          SAPT1_ANCHOR=2026-04-27
+          EOF
+
+      - name: Run pytest
+        run: pytest -v

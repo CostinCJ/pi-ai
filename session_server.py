@@ -1,14 +1,21 @@
 import json
 import logging
+import os
+import signal
+from logging.handlers import RotatingFileHandler
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import db_helpers
-from config import TAILSCALE_IP, SESSION_SERVER_PORT
-
-logging.basicConfig(
-    filename='/home/pi/pi-ai/session_server.log',
-    level=logging.INFO,
-    format='%(asctime)s %(message)s'
+from config import (
+    TAILSCALE_IP, SESSION_SERVER_PORT, SESSION_SHARED_SECRET,
+    LOG_DIR, APP_LOG_MAX_BYTES, APP_LOG_BACKUPS,
 )
+
+_handler = RotatingFileHandler(
+    os.path.join(str(LOG_DIR), 'session_server.log'),
+    maxBytes=APP_LOG_MAX_BYTES, backupCount=APP_LOG_BACKUPS,
+)
+_handler.setFormatter(logging.Formatter('%(asctime)s %(message)s'))
+logging.basicConfig(level=logging.INFO, handlers=[_handler])
 
 
 def _validate(payload):
@@ -31,6 +38,16 @@ class SessionHandler(BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
             return
+
+        # Optional shared-secret check for defense-in-depth on top of Tailscale ACLs.
+        if SESSION_SHARED_SECRET:
+            sent = self.headers.get('X-Session-Token', '')
+            if sent != SESSION_SHARED_SECRET:
+                logging.warning("rejected: bad/missing X-Session-Token")
+                self.send_response(401)
+                self.end_headers()
+                return
+
         try:
             length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(length)
@@ -56,7 +73,17 @@ class SessionHandler(BaseHTTPRequestHandler):
         pass
 
 
+def _shutdown(signum, frame):
+    logging.info(f"received signal {signum}, shutting down")
+    raise SystemExit(0)
+
+
 if __name__ == '__main__':
+    signal.signal(signal.SIGTERM, _shutdown)
+    signal.signal(signal.SIGINT, _shutdown)
     server = HTTPServer((TAILSCALE_IP, SESSION_SERVER_PORT), SessionHandler)
     logging.info(f"listening on {TAILSCALE_IP}:{SESSION_SERVER_PORT}")
-    server.serve_forever()
+    try:
+        server.serve_forever()
+    except SystemExit:
+        server.server_close()

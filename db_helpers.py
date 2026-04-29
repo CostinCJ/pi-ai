@@ -1,13 +1,18 @@
 import json
 import sqlite3
 from datetime import datetime, timedelta
-from config import DB_PATH
+from config import (
+    DB_PATH, SESSION_KEEP_ROWS, SESSION_STALE_SEC,
+    PATTERN_LOG_MAX_ROWS, WEEKLY_PROFILE_MAX_ROWS,
+    FACT_DECAY_DAYS, FACT_DECAY_FLOOR,
+)
 
 SEED_PROFILE = "The user is a university student in Cluj-Napoca, Romania (EEST timezone)..."
 
-# Added timeout=10 to handle concurrent writes gracefully
+
 def get_conn():
     return sqlite3.connect(DB_PATH, timeout=10)
+
 
 def log_message(sender, message):
     with get_conn() as conn:
@@ -15,6 +20,7 @@ def log_message(sender, message):
             "INSERT INTO conversations (sender, message) VALUES (?, ?)",
             (sender, message)
         )
+
 
 def get_latest_profile():
     with get_conn() as conn:
@@ -25,6 +31,7 @@ def get_latest_profile():
         return row[0]
     return SEED_PROFILE
 
+
 def get_last_ai_message():
     with get_conn() as conn:
         row = conn.execute(
@@ -34,16 +41,15 @@ def get_last_ai_message():
         return {"text": row[0], "timestamp": row[1]}
     return None
 
+
 def was_recently_active(minutes=90):
-    cutoff = (datetime.now() - timedelta(minutes=minutes)).strftime('%Y-%m-%d %H:%M:%S')
     with get_conn() as conn:
         count = conn.execute(
-            "SELECT COUNT(*) FROM conversations WHERE sender='ai' AND timestamp > ?",
-            (cutoff,)
+            "SELECT COUNT(*) FROM conversations WHERE sender='ai' AND timestamp > datetime('now', ?)",
+            (f'-{int(minutes)} minutes',)
         ).fetchone()[0]
     return count > 0
 
-# --- NEW FUNCTIONS FOR BRAIN.PY ---
 
 def get_user_facts(limit=None):
     with get_conn() as conn:
@@ -59,6 +65,7 @@ def get_user_facts(limit=None):
     if not rows:
         return "(no specific facts stored yet)"
     return "\n".join(f"- {row[1]}" for row in rows)
+
 
 def get_recent_history_messages(limit=8):
     import re
@@ -83,6 +90,7 @@ def get_recent_history_messages(limit=8):
             messages.append({"role": "user", "content": f"[context note: {message}]"})
     return messages
 
+
 def get_recent_patterns(limit=3):
     with get_conn() as conn:
         rows = conn.execute(
@@ -93,17 +101,18 @@ def get_recent_patterns(limit=3):
         return "(no new patterns observed)"
     return "\n".join(f"- {row[0]}" for row in rows)
 
-# --- NEW FUNCTIONS FOR DAILY_SIGNAL, ROLLING_SUMMARY, OPEN_THREADS, PROACTIVE ---
 
 def get_rolling_summary():
     with get_conn() as conn:
         row = conn.execute("SELECT summary FROM rolling_summary ORDER BY generated_at DESC LIMIT 1").fetchone()
     return row[0] if row else None
 
+
 def set_rolling_summary(text):
     with get_conn() as conn:
         conn.execute("DELETE FROM rolling_summary")
         conn.execute("INSERT INTO rolling_summary (summary) VALUES (?)", (text,))
+
 
 def get_open_threads(status='open'):
     with get_conn() as conn:
@@ -113,13 +122,16 @@ def get_open_threads(status='open'):
         ).fetchall()
     return [{"id": r[0], "description": r[1], "status": r[2], "last_referenced": r[3]} for r in rows]
 
+
 def add_open_thread(description):
     with get_conn() as conn:
         conn.execute("INSERT INTO open_threads (description) VALUES (?)", (description,))
 
+
 def close_thread(thread_id):
     with get_conn() as conn:
         conn.execute("UPDATE open_threads SET status='closed' WHERE id=?", (thread_id,))
+
 
 def update_thread_referenced(thread_id):
     with get_conn() as conn:
@@ -127,6 +139,7 @@ def update_thread_referenced(thread_id):
             "UPDATE open_threads SET last_referenced=datetime('now') WHERE id=?",
             (thread_id,)
         )
+
 
 def get_daily_signals(days=3):
     with get_conn() as conn:
@@ -136,6 +149,7 @@ def get_daily_signals(days=3):
         ).fetchall()
     return [{"date": r[0], "mood": r[1], "energy": r[2], "main_topics": r[3], "summary": r[4], "message_count": r[5]} for r in rows]
 
+
 def insert_daily_signal(date, mood, energy, main_topics, summary, message_count):
     with get_conn() as conn:
         conn.execute(
@@ -143,10 +157,12 @@ def insert_daily_signal(date, mood, energy, main_topics, summary, message_count)
             (date, mood, energy, main_topics, summary, message_count)
         )
 
+
 def get_proactive_state(key):
     with get_conn() as conn:
         row = conn.execute("SELECT value FROM proactive_state WHERE key=?", (key,)).fetchone()
     return row[0] if row else None
+
 
 def set_proactive_state(key, value):
     with get_conn() as conn:
@@ -155,12 +171,56 @@ def set_proactive_state(key, value):
             (key, value)
         )
 
-def log_proactive(trigger_type, trigger_key, message_sent):
+
+def log_proactive(trigger_type, trigger_key, message_sent, delivered=1):
+    """Returns the inserted row id so callers can update delivered/user_responded later."""
     with get_conn() as conn:
-        conn.execute(
-            "INSERT INTO proactive_log (trigger_type, trigger_key, message_sent) VALUES (?,?,?)",
-            (trigger_type, trigger_key, message_sent)
+        cur = conn.execute(
+            "INSERT INTO proactive_log (trigger_type, trigger_key, message_sent, delivered, attempts) VALUES (?,?,?,?,1)",
+            (trigger_type, trigger_key, message_sent, delivered)
         )
+        return cur.lastrowid
+
+
+def update_proactive_delivered(row_id, delivered, attempts=None):
+    with get_conn() as conn:
+        if attempts is None:
+            conn.execute(
+                "UPDATE proactive_log SET delivered=? WHERE id=?",
+                (delivered, row_id)
+            )
+        else:
+            conn.execute(
+                "UPDATE proactive_log SET delivered=?, attempts=? WHERE id=?",
+                (delivered, attempts, row_id)
+            )
+
+
+def get_undelivered_proactive(limit=10):
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, message_sent, attempts FROM proactive_log "
+            "WHERE delivered=0 ORDER BY id ASC LIMIT ?",
+            (limit,)
+        ).fetchall()
+    return [{"id": r[0], "message_sent": r[1], "attempts": r[2]} for r in rows]
+
+
+def mark_user_response_received():
+    """Called when the user sends a message. Marks any proactive sent in the
+    last hour as having received a user reply. Best-effort telemetry — must
+    never block the reply path, so we swallow errors (e.g. missing column on
+    a DB that hasn't been re-migrated)."""
+    try:
+        with get_conn() as conn:
+            conn.execute(
+                "UPDATE proactive_log SET user_responded=1 "
+                "WHERE user_responded=0 AND delivered=1 "
+                "AND timestamp > datetime('now', '-1 hour')"
+            )
+    except Exception:
+        pass
+
 
 def was_trigger_fired_today(trigger_type, trigger_key):
     with get_conn() as conn:
@@ -173,8 +233,7 @@ def was_trigger_fired_today(trigger_type, trigger_key):
 
 def mark_proactive_attempted(trigger_type, trigger_key):
     """Record that a proactive trigger was attempted today, regardless of
-    whether the LLM produced a sendable message. Used for dedup so a
-    SILENCE response still cools the trigger down for the rest of the day."""
+    whether the LLM produced a sendable message."""
     state_key = f"attempted:{trigger_type}:{trigger_key}"
     today = datetime.now().strftime("%Y-%m-%d")
     set_proactive_state(state_key, today)
@@ -220,7 +279,8 @@ def log_session_snapshot(apps):
         )
         conn.execute(
             "DELETE FROM session_snapshot WHERE id NOT IN "
-            "(SELECT id FROM session_snapshot ORDER BY id DESC LIMIT 50)"
+            "(SELECT id FROM session_snapshot ORDER BY id DESC LIMIT ?)",
+            (SESSION_KEEP_ROWS,)
         )
 
 
@@ -232,6 +292,66 @@ def get_latest_session_snapshot():
     if not row:
         return None
     ts = datetime.strptime(row[1], "%Y-%m-%d %H:%M:%S")
-    if (datetime.now() - ts).total_seconds() > 300:
+    if (datetime.now() - ts).total_seconds() > SESSION_STALE_SEC:
         return None
     return json.loads(row[0])
+
+
+def get_latest_session_snapshot_meta():
+    """Returns row regardless of staleness, with age in seconds. None if empty."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT apps, timestamp FROM session_snapshot ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    if not row:
+        return None
+    ts = datetime.strptime(row[1], "%Y-%m-%d %H:%M:%S")
+    return {
+        "apps": json.loads(row[0]),
+        "timestamp": row[1],
+        "age_sec": (datetime.now() - ts).total_seconds(),
+    }
+
+
+# --- Maintenance helpers ---
+
+def decay_realtime_facts():
+    """Linearly decay confidence on realtime facts older than FACT_DECAY_DAYS,
+    clamped to FACT_DECAY_FLOOR. Promoted (source != 'realtime') facts are
+    untouched. Run from cron / consolidation."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT fact_key, confidence, last_updated FROM user_facts "
+            "WHERE source='realtime'"
+        ).fetchall()
+        for key, conf, last_updated in rows:
+            try:
+                ts = datetime.strptime(last_updated[:19], "%Y-%m-%d %H:%M:%S")
+            except Exception:
+                continue
+            age_days = (datetime.now() - ts).days
+            if age_days < FACT_DECAY_DAYS:
+                continue
+            # Linear decay: every FACT_DECAY_DAYS halves the distance to floor.
+            steps = age_days // FACT_DECAY_DAYS
+            new_conf = max(FACT_DECAY_FLOOR, conf * (0.5 ** steps))
+            if abs(new_conf - conf) > 0.01:
+                conn.execute(
+                    "UPDATE user_facts SET confidence=? WHERE fact_key=?",
+                    (new_conf, key)
+                )
+
+
+def prune_long_lived_tables():
+    """Trim pattern_log and weekly_profile to configured caps."""
+    with get_conn() as conn:
+        conn.execute(
+            "DELETE FROM pattern_log WHERE id NOT IN "
+            "(SELECT id FROM pattern_log ORDER BY id DESC LIMIT ?)",
+            (PATTERN_LOG_MAX_ROWS,)
+        )
+        conn.execute(
+            "DELETE FROM weekly_profile WHERE id NOT IN "
+            "(SELECT id FROM weekly_profile ORDER BY id DESC LIMIT ?)",
+            (WEEKLY_PROFILE_MAX_ROWS,)
+        )
