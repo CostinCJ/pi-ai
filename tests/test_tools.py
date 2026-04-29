@@ -61,3 +61,28 @@ def test_web_search_truncates_long_snippets(monkeypatch):
     result = tools.web_search("test")
     # body is truncated to 200 chars in format string
     assert len(result) < 1000
+
+
+def test_set_reminder_returns_confirmation(fake_db):
+    import tools
+    from datetime import datetime, timedelta
+    fire_at = (datetime.now() + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+    result = tools.set_reminder("call mom", fire_at)
+    assert "reminder set" in result
+
+
+def test_set_reminder_stores_in_db(fake_db):
+    import tools, db_helpers
+    from datetime import datetime, timedelta
+    fire_at = (datetime.now() + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+    tools.set_reminder("dentist appointment", fire_at)
+    # It's in the future, so not in get_due_reminders — check raw
+    with db_helpers.get_conn() as conn:
+        rows = conn.execute("SELECT text FROM reminders").fetchall()
+    assert any("dentist" in r[0] for r in rows)
+
+
+def test_set_reminder_invalid_datetime(fake_db):
+    import tools
+    result = tools.set_reminder("test", "not-a-datetime")
+    assert "failed" in result.lower()
