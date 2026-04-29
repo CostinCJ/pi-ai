@@ -31,6 +31,8 @@ LOG_DIR = BASE_DIR
 # --- LLM ---
 GROQ_API_KEY = _req("GROQ_API_KEY")
 GROQ_MODEL = _opt("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_VISION_MODEL  = _opt("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
+SEARCH_MAX_RESULTS = int(_opt("SEARCH_MAX_RESULTS", "3"))
 
 # --- Telegram ---
 TELEGRAM_TOKEN = _req("TELEGRAM_TOKEN")
