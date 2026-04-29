@@ -355,3 +355,29 @@ def prune_long_lived_tables():
             "(SELECT id FROM weekly_profile ORDER BY id DESC LIMIT ?)",
             (WEEKLY_PROFILE_MAX_ROWS,)
         )
+
+
+def add_reminder(text, fire_at):
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO reminders (text, fire_at) VALUES (?, ?)",
+            (text, fire_at)
+        )
+
+
+def get_due_reminders():
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, text, fire_at FROM reminders "
+            "WHERE delivered=0 AND fire_at <= datetime('now', 'localtime') "
+            "ORDER BY fire_at ASC"
+        ).fetchall()
+    return [{"id": r[0], "text": r[1], "fire_at": r[2]} for r in rows]
+
+
+def mark_reminder_delivered(reminder_id):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE reminders SET delivered=1 WHERE id=?",
+            (reminder_id,)
+        )

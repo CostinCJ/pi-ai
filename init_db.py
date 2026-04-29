@@ -135,6 +135,17 @@ def setup_database():
         )
     """)
 
+    # 13. Reminders
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS reminders (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            text       TEXT NOT NULL,
+            fire_at    TEXT NOT NULL,
+            delivered  INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
     # Migrations on user_facts
     for sql in [
         "ALTER TABLE user_facts ADD COLUMN source TEXT DEFAULT 'unknown'",
