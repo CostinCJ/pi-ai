@@ -61,6 +61,18 @@ def retry_undelivered():
             logging.info(f"retry_undelivered: sent id={row['id']} after {attempts} attempts")
 
 
+def deliver_reminders():
+    """Fire any due reminders via Telegram and mark them delivered."""
+    due = db_helpers.get_due_reminders()
+    for row in due[:10]:
+        sent = send_telegram_message(f"reminder: {row['text']}")
+        if sent:
+            db_helpers.mark_reminder_delivered(row['id'])
+            logging.info(f"deliver_reminders: sent id={row['id']}")
+        else:
+            logging.warning(f"deliver_reminders: send failed id={row['id']}")
+
+
 def _handle_trigger_send(trigger_type, fired_context, fired_dedup_key, success_callback=None):
     """Phrases the trigger context and sends. Returns True if the user got a message."""
     current_time = datetime.now().strftime("%A %H:%M")
@@ -195,6 +207,7 @@ if __name__ == '__main__':
     _scheduler.add_job(heartbeat, 'interval', minutes=HEARTBEAT_INTERVAL_MIN)
     _scheduler.add_job(presence_check, 'interval', minutes=PRESENCE_INTERVAL_MIN)
     _scheduler.add_job(retry_undelivered, 'interval', minutes=5)
+    _scheduler.add_job(deliver_reminders, 'interval', minutes=1)
     _scheduler.start()
     try:
         while True:

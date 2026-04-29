@@ -72,3 +72,50 @@ def test_new_artist_trigger_does_not_refire_after_silence(fake_db):
         autonomy.heartbeat()
 
     assert second_call.call_count == 0
+
+
+def test_deliver_reminders_sends_due_and_marks_delivered(fake_db, monkeypatch):
+    from datetime import datetime, timedelta
+
+    fire_at = (datetime.now() - timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S")
+    db_helpers.add_reminder("call mom", fire_at)
+
+    sent_msgs = []
+
+    def fake_send(text):
+        sent_msgs.append(text)
+        return True
+
+    monkeypatch.setattr(autonomy, "send_telegram_message", fake_send)
+    autonomy.deliver_reminders()
+
+    assert len(sent_msgs) == 1
+    assert "call mom" in sent_msgs[0]
+    assert db_helpers.get_due_reminders() == []
+
+
+def test_deliver_reminders_skips_future(fake_db, monkeypatch):
+    from datetime import datetime, timedelta
+
+    fire_at = (datetime.now() + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+    db_helpers.add_reminder("future task", fire_at)
+
+    sent_msgs = []
+    monkeypatch.setattr(autonomy, "send_telegram_message", lambda t: sent_msgs.append(t) or True)
+    autonomy.deliver_reminders()
+
+    assert len(sent_msgs) == 0
+
+
+def test_deliver_reminders_caps_at_10(fake_db, monkeypatch):
+    from datetime import datetime, timedelta
+
+    fire_at = (datetime.now() - timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S")
+    for i in range(15):
+        db_helpers.add_reminder(f"reminder {i}", fire_at)
+
+    sent_msgs = []
+    monkeypatch.setattr(autonomy, "send_telegram_message", lambda t: sent_msgs.append(t) or True)
+    autonomy.deliver_reminders()
+
+    assert len(sent_msgs) == 10
