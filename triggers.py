@@ -126,6 +126,65 @@ def open_thread_trigger():
     return True, f"yo, did you ever {description}?", f"thread_{thread_id}", thread_id
 
 
+def free_reasoning_trigger():
+    """LLM-driven proactive: survey the user's recent week and decide what to surface.
+    Replaces pattern_surface + open_thread with a single context-aware judgment."""
+    if random.random() > PATTERN_TRIGGER_PROBABILITY:
+        return False, ""
+
+    trigger_key = f"free_reasoning_{datetime.now().strftime('%Y-%m-%d')}"
+    if db_helpers.was_proactive_attempted_today('free_reasoning', trigger_key):
+        return False, ""
+
+    signals = db_helpers.get_daily_signals(days=7)
+    signal_text = "\n".join(
+        f"{s['date']}: mood={s['mood'] or '?'} energy={s['energy'] or '?'} topics={s['main_topics'] or '?'}"
+        for s in signals
+    ) if signals else "(no daily signals yet)"
+
+    patterns = db_helpers.get_recent_patterns(limit=3)
+
+    threads = db_helpers.get_open_threads(status='open')
+    thread_text = "\n".join(
+        f"- {t['description']} (last ref: {t['last_referenced'] or 'never'})"
+        for t in threads[:3]
+    ) if threads else "(no open threads)"
+
+    summary = db_helpers.get_rolling_summary() or "(no summary)"
+    last = db_helpers.get_last_ai_message()
+    last_text = f"{last['text']} ({last['timestamp']})" if last else "(none)"
+
+    from llm import chat
+    from persona import get_vibe
+
+    messages = [
+        {"role": "system", "content": (
+            f"Time: {datetime.now().strftime('%A %H:%M')} | Vibe: {get_vibe()}\n\n"
+            f"Daily signals (last 7 days):\n{signal_text}\n\n"
+            f"Recent patterns:\n{patterns}\n\n"
+            f"Open threads:\n{thread_text}\n\n"
+            f"Rolling summary: {summary[:300]}\n\n"
+            f"Last message you sent: {last_text}\n\n"
+            "You are Lache. Given the above context about the user's recent week, "
+            "do you notice something specific and genuine worth bringing up right now? "
+            "If yes, write a short context string (e.g. 'user mentioned wanting to "
+            "learn guitar 3 days ago, hasn't brought it up since'). "
+            "If there's nothing genuine to surface, reply with the single word SILENCE."
+        )},
+        {"role": "user", "content": "what do you notice?"},
+    ]
+
+    try:
+        result = chat(messages, {"temperature": 0.7, "num_predict": 80}, timeout=60)
+    except Exception:
+        return False, ""
+
+    if not result or result.strip().upper() == "SILENCE":
+        return False, ""
+
+    return True, result.strip(), trigger_key
+
+
 GAME_KEYWORDS = {'league', 'valorant', 'cs2', 'cyberpunk', 'fortnite', 'minecraft', 'overwatch'}
 
 
@@ -201,6 +260,5 @@ ALL_TRIGGERS = [
     ('session',         session_trigger),
     ('weather_flip',    weather_flip_trigger),
     ('late_night',      late_night_trigger),
-    ('pattern_surface', pattern_surface_trigger),
-    ('open_thread',     open_thread_trigger),
+    ('free_reasoning',  free_reasoning_trigger),
 ]

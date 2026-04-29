@@ -46,20 +46,6 @@ def test_session_trigger_no_game(fake_db):
     assert ok is False
 
 
-def test_pattern_surface_picks_recent(fake_db):
-    with db_helpers.get_conn() as conn:
-        for i, p in enumerate(["old pattern", "newer pattern", "newest pattern"]):
-            conn.execute("INSERT INTO pattern_log (pattern_description) VALUES (?)", (p,))
-    # force the random gate open
-    with patch("triggers.random.random", return_value=0.0), \
-         patch("triggers.random.choices", side_effect=lambda choices, weights, k: [choices[0]]):
-        result = triggers.pattern_surface_trigger()
-    assert result[0] is True
-    # choices[0] is the most-recent row in our DESC ordering
-    assert "newest" in result[1]
-    assert result[2].startswith("pattern_")
-
-
 def test_class_soon_returns_attempt_dedup_key(fake_db):
     with patch("triggers.uni_schedule.has_class_soon", return_value="TRSI curs in ~45min"):
         result = triggers.has_class_soon_trigger()
@@ -77,21 +63,55 @@ def test_class_soon_dedup_after_attempt(fake_db):
     assert second[0] is False
 
 
-def test_pattern_surface_skipped_by_random(fake_db):
-    with patch("triggers.random.random", return_value=0.99):
-        ok, _ = triggers.pattern_surface_trigger()
+def test_free_reasoning_trigger_skipped_by_probability(fake_db, monkeypatch):
+    import triggers
+    monkeypatch.setattr(triggers.random, "random", lambda: 0.99)
+    ok, _ = triggers.free_reasoning_trigger()
     assert ok is False
 
 
-def test_open_thread_returns_thread_id_for_deferred_update(fake_db):
-    db_helpers.add_open_thread("fix the guitar amp")
-    result = triggers.open_thread_trigger()
+def test_free_reasoning_trigger_returns_silence(fake_db, monkeypatch):
+    import triggers, llm
+    monkeypatch.setattr(triggers.random, "random", lambda: 0.0)
+    monkeypatch.setattr(llm, "chat", lambda messages, options=None, timeout=60: "SILENCE")
+    result = triggers.free_reasoning_trigger()
+    assert result[0] is False
+
+
+def test_free_reasoning_trigger_returns_context_string(fake_db, monkeypatch):
+    import triggers, llm
+    monkeypatch.setattr(triggers.random, "random", lambda: 0.0)
+    monkeypatch.setattr(
+        llm, "chat",
+        lambda messages, options=None, timeout=60: "user mentioned guitar 3 days ago"
+    )
+    result = triggers.free_reasoning_trigger()
     assert result[0] is True
-    assert "guitar amp" in result[1]
-    # 4-tuple: (True, context, dedup_key, thread_id) so the caller can defer
-    # update_thread_referenced until after a successful send.
-    assert len(result) == 4
-    assert isinstance(result[3], int)
-    # Critically: should NOT have been marked as referenced yet.
-    threads = db_helpers.get_open_threads(status='open')
-    assert threads[0]["last_referenced"] is None
+    assert result[1] == "user mentioned guitar 3 days ago"
+    assert result[2].startswith("free_reasoning_")
+
+
+def test_free_reasoning_trigger_dedup(fake_db, monkeypatch):
+    import triggers, llm, db_helpers
+    from datetime import datetime
+    monkeypatch.setattr(triggers.random, "random", lambda: 0.0)
+    trigger_key = f"free_reasoning_{datetime.now().strftime('%Y-%m-%d')}"
+    db_helpers.mark_proactive_attempted("free_reasoning", trigger_key)
+    monkeypatch.setattr(
+        llm, "chat",
+        lambda messages, options=None, timeout=60: "something interesting"
+    )
+    result = triggers.free_reasoning_trigger()
+    assert result[0] is False
+
+
+def test_free_reasoning_trigger_handles_llm_exception(fake_db, monkeypatch):
+    import triggers, llm
+    monkeypatch.setattr(triggers.random, "random", lambda: 0.0)
+
+    def raise_err(*a, **kw):
+        raise RuntimeError("groq down")
+
+    monkeypatch.setattr(llm, "chat", raise_err)
+    result = triggers.free_reasoning_trigger()
+    assert result[0] is False
