@@ -1,6 +1,10 @@
-from duckduckgo_search import DDGS
 from config import SEARCH_MAX_RESULTS
 import db_helpers as _db
+
+try:
+    from ddgs import DDGS
+except ImportError:  # pragma: no cover - compatibility for older installs
+    from duckduckgo_search import DDGS
 
 
 def web_search(query: str) -> str:
