@@ -14,7 +14,7 @@ async def test_empty_brain_reply_does_not_crash_handler(fake_db):
     ctx = MagicMock()
     ctx.bot.send_chat_action = AsyncMock()
 
-    with patch("bot.brain.generate_reply", return_value=""):
+    with patch("bot.brain.generate_agentic_reply", return_value=""):
         await bot.handle_message(update, ctx)
 
     for call in update.message.reply_text.call_args_list:
@@ -32,7 +32,7 @@ async def test_telegram_reply_failure_is_logged_not_swallowed(fake_db, caplog):
     ctx = MagicMock()
     ctx.bot.send_chat_action = AsyncMock()
 
-    with patch("bot.brain.generate_reply", return_value="hey back"):
+    with patch("bot.brain.generate_agentic_reply", return_value="hey back"):
         await bot.handle_message(update, ctx)  # must not raise
 
     assert any("reply_text" in r.message or "network" in r.message
@@ -56,7 +56,7 @@ async def test_repeated_user_message_logs_quality_event(fake_db):
     ctx = MagicMock()
     ctx.bot.send_chat_action = AsyncMock()
 
-    with patch("bot.brain.generate_reply", return_value="bars or cruising?"):
+    with patch("bot.brain.generate_agentic_reply", return_value="bars or cruising?"):
         await bot.handle_message(update, ctx)
 
     with db_helpers.get_conn() as conn:

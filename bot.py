@@ -1,3 +1,4 @@
+import base64
 import logging
 import os
 import random
@@ -101,13 +102,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(chat_id=chat_id, action='typing')
 
     try:
-        ai_reply = brain.generate_reply(user_msg)
+        ai_reply = brain.generate_agentic_reply(user_msg)
     except Exception as e:
-        _log.error(f"brain.generate_reply failed: {e}", exc_info=True)
+        _log.error(f"brain.generate_agentic_reply failed: {e}", exc_info=True)
         ai_reply = "brain hiccup, try again in a sec"
 
     if not ai_reply or not ai_reply.strip():
-        _log.error("generate_reply returned empty; using last-resort fallback")
+        _log.error("generate_agentic_reply returned empty; using last-resort fallback")
         ai_reply = random.choice(IN_CHARACTER_FALLBACKS)
     elif _is_echo(ai_reply, user_msg):
         _log.warning(f"echo detected, using fallback. ai={ai_reply!r}")
@@ -117,6 +118,42 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db_helpers.log_message('ai', ai_reply)
     db_helpers.mark_user_response_received()
 
+    try:
+        await update.message.reply_text(ai_reply)
+    except Exception as e:
+        _log.error(f"reply_text failed: {e}", exc_info=True)
+
+    threading.Thread(target=llm_facts.extract_and_store_facts, daemon=True).start()
+
+
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update):
+        return
+    chat_id = update.message.chat_id
+    caption = update.message.caption or ""
+    await context.bot.send_chat_action(chat_id=chat_id, action='typing')
+
+    try:
+        file = await context.bot.get_file(update.message.photo[-1].file_id)
+        image_bytes = await file.download_as_bytearray()
+        image_data = base64.b64encode(bytes(image_bytes)).decode('utf-8')
+    except Exception as e:
+        _log.error(f"photo download failed: {e}")
+        await update.message.reply_text(random.choice(IN_CHARACTER_FALLBACKS))
+        return
+
+    db_helpers.log_message('user', f"[photo]{': ' + caption if caption else ''}")
+
+    try:
+        ai_reply = brain.generate_agentic_reply(caption, image_data=image_data)
+    except Exception as e:
+        _log.error(f"vision reply failed: {e}", exc_info=True)
+        ai_reply = random.choice(IN_CHARACTER_FALLBACKS)
+
+    if not ai_reply or not ai_reply.strip():
+        ai_reply = random.choice(IN_CHARACTER_FALLBACKS)
+
+    db_helpers.log_message('ai', ai_reply)
     try:
         await update.message.reply_text(ai_reply)
     except Exception as e:
@@ -234,6 +271,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/facts — full fact list with source and confidence\n"
         "/threads — open topics lache is tracking\n"
         "/forget <key-or-substring> — delete a stored fact\n"
+        "/remind HH:MM <text> — set a reminder\n"
         "/reflect — run weekly reflection now\n"
         "/consolidate — run daily fact extraction now\n"
         "/poweron — wake up your laptop via WoL\n"
@@ -501,6 +539,7 @@ if __name__ == '__main__':
 
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+    app.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, handle_photo))
     app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("ping", cmd_ping))
     app.add_handler(CommandHandler("mood", cmd_mood))
