@@ -92,7 +92,7 @@ def is_in_character(text, max_chars=None):
     return is_acceptable(s)
 
 
-def chat(messages, options=None, timeout=60):
+def chat(messages, options=None, timeout=60, model=None):
     caller = inspect.stack()[1].function
     if options is None:
         options = {}
@@ -108,7 +108,7 @@ def chat(messages, options=None, timeout=60):
     for attempt in range(2):
         try:
             completion = _client.chat.completions.create(
-                model=GROQ_MODEL,
+                model=model or GROQ_MODEL,
                 messages=messages,
                 timeout=timeout,
                 **kwargs,
@@ -178,3 +178,46 @@ def chat_with_retry(messages, options=None, timeout=60, retry_hint=None, max_cha
         return second, True
     _db.log_quality_event('retry_failed', second[:200])
     return second, False
+
+
+def chat_with_tools(messages, tools, options=None, timeout=60, model=None):
+    """Call Groq with function-calling tools.
+
+    Returns a 4-tuple:
+      (text, None, None, None)          — LLM replied directly
+      (None, tool_name, args, call_id)  — LLM wants to call a tool
+      (None, None, None, None)          — error (caller should fall back)
+    """
+    caller = inspect.stack()[1].function
+    if options is None:
+        options = {}
+    t0 = time.time()
+
+    kwargs = {}
+    if "temperature" in options:
+        kwargs["temperature"] = options["temperature"]
+    kwargs["max_tokens"] = options.get("num_predict") or options.get("max_tokens") or 150
+
+    try:
+        completion = _client.chat.completions.create(
+            model=model or GROQ_MODEL,
+            messages=messages,
+            tools=tools,
+            tool_choice="auto",
+            timeout=timeout,
+            **kwargs,
+        )
+        choice = completion.choices[0]
+        _log(caller, (time.time() - t0) * 1000, True)
+
+        if choice.finish_reason == "tool_calls" and choice.message.tool_calls:
+            tc = choice.message.tool_calls[0]
+            args = json.loads(tc.function.arguments)
+            return None, tc.function.name, args, tc.id
+
+        content = choice.message.content or ""
+        return _clean(content), None, None, None
+
+    except Exception as e:
+        _log(caller, (time.time() - t0) * 1000, False, f"err={type(e).__name__}")
+        return None, None, None, None
