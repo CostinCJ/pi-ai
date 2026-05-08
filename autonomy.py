@@ -6,6 +6,7 @@ from logging.handlers import RotatingFileHandler
 import requests
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import timezone
 import db_helpers
 import spotify_sync
 from config import (
@@ -27,6 +28,24 @@ _handler.setFormatter(logging.Formatter('%(asctime)s %(message)s'))
 logging.basicConfig(level=logging.INFO, handlers=[_handler])
 
 _PHRASING_OPTIONS = {"temperature": 0.4, "num_predict": 40}
+
+
+def _last_sent_label(last_sent):
+    if not last_sent:
+        return "(none)"
+    try:
+        ts = datetime.strptime(last_sent['timestamp'], "%Y-%m-%d %H:%M:%S")
+        ts = ts.replace(tzinfo=timezone.utc).astimezone().replace(tzinfo=None)
+        mins = int((datetime.now() - ts).total_seconds() / 60)
+        if mins < 60:
+            age = f"{mins}min ago"
+        elif mins < 1440:
+            age = f"{mins // 60}h ago"
+        else:
+            age = f"{mins // 1440}d ago"
+        return f"{last_sent['text']} ({age})"
+    except Exception:
+        return last_sent['text']
 
 
 def send_telegram_message(text):
@@ -75,10 +94,10 @@ def deliver_reminders():
 
 def _handle_trigger_send(trigger_type, fired_context, fired_dedup_key, success_callback=None):
     """Phrases the trigger context and sends. Returns True if the user got a message."""
-    current_time = datetime.now().strftime("%A %H:%M")
+    current_time = datetime.now().strftime("%a %d %b, %H:%M")
     vibe = get_vibe()
     last_sent = db_helpers.get_last_ai_message()
-    last_sent_text = last_sent['text'] if last_sent else "(none)"
+    last_sent_text = _last_sent_label(last_sent)
 
     phrasing_messages = [
         {"role": "system", "content": (

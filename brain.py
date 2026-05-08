@@ -110,7 +110,7 @@ def _build_proactive_context(spotify_clean=None):
 
 def think_and_decide(spotify_raw=None):
     now = datetime.now()
-    current_time = now.strftime("%A, %H:%M")
+    current_time = now.strftime("%a %d %b, %H:%M")
     last_sent = db_helpers.get_last_ai_message()
     spotify_clean = _spotify_clean(spotify_raw if spotify_raw is not None else spotify_sync.get_recent_tracks())
     context = _build_proactive_context(spotify_clean)
@@ -171,7 +171,7 @@ def _generate_vision_reply(user_message, image_data):
         "Describe what you see in your casual voice (one or two sentences). "
         "If the image contains something worth remembering — a schedule, a note, "
         "a place, a person — mention it naturally so it can be logged.\n"
-        f"Time: {datetime.now().strftime('%A, %H:%M')} | Vibe: {get_vibe()}"
+        f"Time: {datetime.now().strftime('%a %d %b, %H:%M')} | Vibe: {get_vibe()}"
     )
     user_content = [
         {"type": "text", "text": user_message or "what's in this?"},
@@ -190,7 +190,7 @@ def _generate_vision_reply(user_message, image_data):
 
 
 def _generate_tool_reply(user_message):
-    current_time = datetime.now().strftime("%A, %H:%M")
+    current_time = datetime.now().strftime("%a %d %b, %H:%M")
     spotify_clean = _spotify_clean(spotify_sync.get_recent_tracks())
     context = _build_context_line(user_message, spotify_clean)
     classes = uni_schedule.get_todays_classes()
@@ -198,9 +198,13 @@ def _generate_tool_reply(user_message):
     music_keywords = ["song", "music", "listening", "track", "playlist", "playing", "hear"]
     is_music = any(k in user_message.lower() for k in music_keywords)
     music_note = " Use the music data from context to answer specifically." if is_music else ""
-    rolling = db_helpers.get_rolling_summary()
+    rolling, rolling_at = db_helpers.get_rolling_summary_meta()
     is_long = len(user_message) > LONG_USER_MESSAGE_THRESHOLD
-    earlier = f"\nEarlier: {rolling[:300]}" if rolling and is_long else ""
+    if rolling and is_long:
+        age_tag = f" ({rolling_at[:10]})" if rolling_at else ""
+        earlier = f"\nEarlier{age_tag}: {rolling[:300]}"
+    else:
+        earlier = ""
     cap = IN_CHARACTER_MAX_CHARS_LONG if is_long else None
 
     system = (
@@ -256,7 +260,7 @@ def generate_agentic_reply(user_message, image_data=None):
 
 
 def generate_reply(user_message):
-    current_time = datetime.now().strftime("%A, %H:%M")
+    current_time = datetime.now().strftime("%a %d %b, %H:%M")
     spotify_clean = _spotify_clean(spotify_sync.get_recent_tracks())
     context = _build_context_line(user_message, spotify_clean)
     classes = uni_schedule.get_todays_classes()
@@ -266,9 +270,13 @@ def generate_reply(user_message):
     is_music = any(k in user_message.lower() for k in music_keywords)
     music_note = " Use the music data from context to answer specifically." if is_music else ""
 
-    rolling = db_helpers.get_rolling_summary()
+    rolling, rolling_at = db_helpers.get_rolling_summary_meta()
     is_long = len(user_message) > LONG_USER_MESSAGE_THRESHOLD
-    earlier = f"\nEarlier: {rolling[:300]}" if rolling and is_long else ""
+    if rolling and is_long:
+        age_tag = f" ({rolling_at[:10]})" if rolling_at else ""
+        earlier = f"\nEarlier{age_tag}: {rolling[:300]}"
+    else:
+        earlier = ""
 
     system = f"""{PERSONA}
 

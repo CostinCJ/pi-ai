@@ -1,6 +1,9 @@
+from datetime import datetime, timezone, timedelta
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 from config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SPOTIFY_REDIRECT_URI
+
+RECENT_ACTIVE_HOURS = 4
 
 SCOPE = "user-read-recently-played user-read-currently-playing"
 
@@ -33,9 +36,16 @@ def get_recent_tracks():
         results = sp.current_user_recently_played(limit=5)
 
         if not results or not results.get('items'):
-            return "No tracks played recently."
+            return None
 
-        first_artist = results['items'][0]['track']['artists'][0]['name']
+        first_item = results['items'][0]
+        played_at_str = first_item.get('played_at', '')
+        if played_at_str:
+            played_at = datetime.fromisoformat(played_at_str.replace('Z', '+00:00'))
+            if datetime.now(timezone.utc) - played_at > timedelta(hours=RECENT_ACTIVE_HOURS):
+                return None
+
+        first_artist = first_item['track']['artists'][0]['name']
         track_last_artist(first_artist)
 
         output = ""
@@ -53,7 +63,7 @@ def get_recent_tracks():
         return output
 
     except Exception:
-        return "Spotify data unavailable."
+        return None
 
 
 def get_last_artist():

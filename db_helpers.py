@@ -51,20 +51,39 @@ def was_recently_active(minutes=90):
     return count > 0
 
 
+def _utc_age_label(ts_str):
+    try:
+        ts = datetime.strptime(ts_str[:19], "%Y-%m-%d %H:%M:%S")
+        days = (datetime.utcnow() - ts).days
+        if days == 0:
+            return "today"
+        if days < 7:
+            return f"{days}d ago"
+        if days < 30:
+            return f"{days // 7}w ago"
+        return f"{days // 30}mo ago"
+    except Exception:
+        return ""
+
+
 def get_user_facts(limit=None):
     with get_conn() as conn:
         if limit:
             rows = conn.execute(
-                "SELECT fact_key, fact_value FROM user_facts ORDER BY last_updated DESC LIMIT ?",
+                "SELECT fact_key, fact_value, last_updated FROM user_facts ORDER BY last_updated DESC LIMIT ?",
                 (limit,)
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT fact_key, fact_value FROM user_facts ORDER BY last_updated DESC"
+                "SELECT fact_key, fact_value, last_updated FROM user_facts ORDER BY last_updated DESC"
             ).fetchall()
     if not rows:
         return "(no specific facts stored yet)"
-    return "\n".join(f"- {row[1]}" for row in rows)
+    parts = []
+    for key, value, ts in rows:
+        age = _utc_age_label(ts)
+        parts.append(f"- {value} [{age}]" if age else f"- {value}")
+    return "\n".join(parts)
 
 
 def get_recent_history_messages(limit=8):
@@ -106,6 +125,15 @@ def get_rolling_summary():
     with get_conn() as conn:
         row = conn.execute("SELECT summary FROM rolling_summary ORDER BY generated_at DESC LIMIT 1").fetchone()
     return row[0] if row else None
+
+
+def get_rolling_summary_meta():
+    """Returns (summary_text, generated_at_utc_str) or (None, None)."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT summary, generated_at FROM rolling_summary ORDER BY generated_at DESC LIMIT 1"
+        ).fetchone()
+    return (row[0], row[1]) if row else (None, None)
 
 
 def set_rolling_summary(text):

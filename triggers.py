@@ -159,7 +159,7 @@ def free_reasoning_trigger():
 
     messages = [
         {"role": "system", "content": (
-            f"Time: {datetime.now().strftime('%A %H:%M')} | Vibe: {get_vibe()}\n\n"
+            f"Time: {datetime.now().strftime('%a %d %b, %H:%M')} | Vibe: {get_vibe()}\n\n"
             f"Daily signals (last 7 days):\n{signal_text}\n\n"
             f"Recent patterns:\n{patterns}\n\n"
             f"Open threads:\n{thread_text}\n\n"
