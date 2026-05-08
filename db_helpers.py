@@ -413,47 +413,56 @@ def mark_reminder_delivered(reminder_id):
 
 def log_spotify_track(artist, title, played_at):
     """Insert a track if played_at is new (dedup by timestamp). Returns True if inserted."""
-    with get_conn() as conn:
-        cur = conn.execute("SELECT 1 FROM spotify_tracks WHERE played_at=?", (played_at,))
-        if cur.fetchone():
-            return False
-        conn.execute(
-            "INSERT INTO spotify_tracks (artist, title, played_at) VALUES (?, ?, ?)",
-            (artist, title, played_at)
-        )
-        return True
+    try:
+        with get_conn() as conn:
+            cur = conn.execute("SELECT 1 FROM spotify_tracks WHERE played_at=?", (played_at,))
+            if cur.fetchone():
+                return False
+            conn.execute(
+                "INSERT INTO spotify_tracks (artist, title, played_at) VALUES (?, ?, ?)",
+                (artist, title, played_at)
+            )
+            return True
+    except Exception:
+        return False
 
 
 def get_recent_spotify(limit=10):
     """Compact string of recent tracks with relative times, or None if empty."""
-    with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT artist, title, played_at FROM spotify_tracks ORDER BY played_at DESC LIMIT ?",
-            (limit,)
-        ).fetchall()
-    if not rows:
+    try:
+        with get_conn() as conn:
+            rows = conn.execute(
+                "SELECT artist, title, played_at FROM spotify_tracks ORDER BY played_at DESC LIMIT ?",
+                (limit,)
+            ).fetchall()
+        if not rows:
+            return None
+        parts = []
+        for artist, title, played_at in rows:
+            try:
+                ts = datetime.strptime(played_at[:19], "%Y-%m-%d %H:%M:%S")
+                mins = int((datetime.now() - ts).total_seconds() / 60)
+                if mins < 60:
+                    age = f"{mins}m ago"
+                elif mins < 1440:
+                    age = f"{mins // 60}h ago"
+                else:
+                    age = f"{mins // 1440}d ago"
+            except Exception:
+                age = ""
+            parts.append(f"{artist} - {title} ({age})" if age else f"{artist} - {title}")
+        return ", ".join(parts)
+    except Exception:
         return None
-    parts = []
-    for artist, title, played_at in rows:
-        try:
-            ts = datetime.strptime(played_at[:19], "%Y-%m-%d %H:%M:%S")
-            mins = int((datetime.now() - ts).total_seconds() / 60)
-            if mins < 60:
-                age = f"{mins}m ago"
-            elif mins < 1440:
-                age = f"{mins // 60}h ago"
-            else:
-                age = f"{mins // 1440}d ago"
-        except Exception:
-            age = ""
-        parts.append(f"{artist} - {title} ({age})" if age else f"{artist} - {title}")
-    return ", ".join(parts)
 
 
 def prune_spotify_tracks(days=30):
     """Remove tracks older than N days."""
-    with get_conn() as conn:
-        conn.execute(
-            "DELETE FROM spotify_tracks WHERE played_at < datetime('now', ?)",
-            (f'-{int(days)} days',)
+    try:
+        with get_conn() as conn:
+            conn.execute(
+                "DELETE FROM spotify_tracks WHERE played_at < datetime('now', ?)",
+                (f'-{int(days)} days',)
         )
+    except Exception:
+        pass
