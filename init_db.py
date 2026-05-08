@@ -135,7 +135,22 @@ def setup_database():
         )
     """)
 
-    # 13. Reminders
+    # 13. Spotify Tracks
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS spotify_tracks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        artist TEXT NOT NULL,
+        title TEXT NOT NULL,
+        played_at TEXT NOT NULL UNIQUE,
+        logged_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+    cursor.execute('''
+    CREATE INDEX IF NOT EXISTS idx_spotify_tracks_played_at
+    ON spotify_tracks(played_at DESC)
+    ''')
+
+    # 14. Reminders
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS reminders (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -45,9 +45,6 @@ def get_recent_tracks():
             if datetime.now(timezone.utc) - played_at > timedelta(hours=RECENT_ACTIVE_HOURS):
                 return None
 
-        first_artist = first_item['track']['artists'][0]['name']
-        track_last_artist(first_artist)
-
         output = ""
         for item in results['items']:
             artist = item['track']['artists'][0]['name']
@@ -65,15 +62,28 @@ def get_recent_tracks():
     except Exception:
         return None
 
-
-def get_last_artist():
-    import db_helpers
-    return db_helpers.get_proactive_state('last_artist')
-
-
-def track_last_artist(artist):
-    import db_helpers
-    db_helpers.set_proactive_state('last_artist', artist)
+def get_recent_tracks_raw():
+    """Return list of {artist, title, played_at} dicts for the polling loop."""
+    try:
+        sp = _get_sp()
+        results = sp.current_user_recently_played(limit=10)
+        if not results or not results.get('items'):
+            return []
+        tracks = []
+        for item in results['items']:
+            played_at_str = item.get('played_at', '')
+            if played_at_str:
+                played_at = datetime.fromisoformat(played_at_str.replace('Z', '+00:00'))
+                if datetime.now(timezone.utc) - played_at > timedelta(hours=RECENT_ACTIVE_HOURS):
+                    continue
+            tracks.append({
+                'artist': item['track']['artists'][0]['name'],
+                'title': item['track']['name'],
+                'played_at': played_at_str.replace('Z', ' ').replace('T', ' ')[:19]
+            })
+        return tracks
+    except Exception:
+        return []
 
 
 if __name__ == '__main__':

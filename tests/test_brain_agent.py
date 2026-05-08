@@ -5,7 +5,7 @@ from unittest.mock import patch
 def _stub_externals(monkeypatch):
     """Silence spotify/weather/schedule/db calls so tests stay focused."""
     import brain, db_helpers
-    monkeypatch.setattr(brain.spotify_sync, "get_recent_tracks", lambda: "")
+    monkeypatch.setattr(db_helpers, "get_recent_spotify", lambda limit=10: None)
     monkeypatch.setattr(brain.weather_sync, "get_current_weather", lambda: "")
     monkeypatch.setattr(brain.uni_schedule, "get_todays_classes", lambda: "no classes today")
     monkeypatch.setattr(brain.uni_schedule, "has_class_soon", lambda: None)

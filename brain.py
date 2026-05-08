@@ -3,7 +3,6 @@ import logging
 import random
 from datetime import datetime
 import weather_sync
-import spotify_sync
 import db_helpers
 import tools as _tools
 import schedule as uni_schedule
@@ -11,7 +10,7 @@ from llm import chat, chat_with_retry, is_acceptable, chat_with_tools, is_in_cha
 from persona import PERSONA, IN_CHARACTER_FALLBACKS, get_vibe
 from config import (
     LONG_USER_MESSAGE_THRESHOLD, IN_CHARACTER_MAX_CHARS_LONG,
-    GROQ_VISION_MODEL,
+    GROQ_VISION_MODEL, SPOTIFY_CONTEXT_LIMIT,
 )
 
 _log = logging.getLogger('brain')
@@ -69,12 +68,6 @@ def _format_session(snapshot):
     return "Session: " + ", ".join(parts)
 
 
-def _spotify_clean(spotify_raw):
-    if not spotify_raw or "unavailable" in spotify_raw.lower():
-        return None
-    return spotify_raw.replace("Recent tracks: ", "")
-
-
 def _build_context_line(user_message="", spotify_clean=None):
     parts = []
     facts = db_helpers.get_user_facts(limit=5)
@@ -112,7 +105,7 @@ def think_and_decide(spotify_raw=None):
     now = datetime.now()
     current_time = now.strftime("%a %d %b, %H:%M")
     last_sent = db_helpers.get_last_ai_message()
-    spotify_clean = _spotify_clean(spotify_raw if spotify_raw is not None else spotify_sync.get_recent_tracks())
+    spotify_clean = db_helpers.get_recent_spotify(limit=SPOTIFY_CONTEXT_LIMIT)
     context = _build_proactive_context(spotify_clean)
     upcoming = uni_schedule.has_class_soon()
 
@@ -191,7 +184,7 @@ def _generate_vision_reply(user_message, image_data):
 
 def _generate_tool_reply(user_message):
     current_time = datetime.now().strftime("%a %d %b, %H:%M")
-    spotify_clean = _spotify_clean(spotify_sync.get_recent_tracks())
+    spotify_clean = db_helpers.get_recent_spotify(limit=SPOTIFY_CONTEXT_LIMIT)
     context = _build_context_line(user_message, spotify_clean)
     classes = uni_schedule.get_todays_classes()
     upcoming = uni_schedule.has_class_soon()
@@ -261,7 +254,7 @@ def generate_agentic_reply(user_message, image_data=None):
 
 def generate_reply(user_message):
     current_time = datetime.now().strftime("%a %d %b, %H:%M")
-    spotify_clean = _spotify_clean(spotify_sync.get_recent_tracks())
+    spotify_clean = db_helpers.get_recent_spotify(limit=SPOTIFY_CONTEXT_LIMIT)
     context = _build_context_line(user_message, spotify_clean)
     classes = uni_schedule.get_todays_classes()
     upcoming = uni_schedule.has_class_soon()

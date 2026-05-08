@@ -15,6 +15,7 @@ from config import (
     HEARTBEAT_INTERVAL_MIN, PRESENCE_INTERVAL_MIN,
     QUIET_HOURS_START, QUIET_HOURS_END,
     RECENT_ACTIVE_COOLDOWN_MIN,
+    SPOTIFY_POLL_INTERVAL_MIN, SPOTIFY_TRACKS_KEEP_DAYS,
 )
 from triggers import ALL_TRIGGERS, home_arrival_trigger
 from llm import chat_with_retry
@@ -146,12 +147,6 @@ def heartbeat():
         logging.info("tick: recently active, skipped")
         return
 
-    # Cache spotify so triggers + context don't double-fetch this tick.
-    try:
-        spotify_raw = spotify_sync.get_recent_tracks()
-    except Exception:
-        spotify_raw = None
-
     fired_type = None
     fired_context = None
     fired_dedup_key = None
@@ -205,6 +200,32 @@ def presence_check():
     logging.info(f"presence_check: handled latency_ms={latency}")
 
 
+def spotify_poll():
+    """Poll Spotify API for recent tracks and log new ones to DB."""
+    try:
+        tracks = spotify_sync.get_recent_tracks_raw()
+    except Exception as e:
+        logging.error(f"spotify_poll fetch failed: {e}")
+        return
+    new_count = 0
+    for t in tracks:
+        try:
+            if db_helpers.log_spotify_track(t['artist'], t['title'], t['played_at']):
+                new_count += 1
+        except Exception:
+            pass
+    if new_count:
+        logging.info(f"spotify_poll: logged {new_count} new tracks")
+
+
+def spotify_prune():
+    """Trim old spotify tracks."""
+    try:
+        db_helpers.prune_spotify_tracks(days=SPOTIFY_TRACKS_KEEP_DAYS)
+    except Exception as e:
+        logging.error(f"spotify_prune failed: {e}")
+
+
 _scheduler = None
 
 
@@ -227,6 +248,8 @@ if __name__ == '__main__':
     _scheduler.add_job(presence_check, 'interval', minutes=PRESENCE_INTERVAL_MIN)
     _scheduler.add_job(retry_undelivered, 'interval', minutes=5)
     _scheduler.add_job(deliver_reminders, 'interval', minutes=1)
+    _scheduler.add_job(spotify_poll, 'interval', minutes=SPOTIFY_POLL_INTERVAL_MIN)
+    _scheduler.add_job(spotify_prune, 'cron', hour=4, minute=37)
     _scheduler.start()
     try:
         while True:

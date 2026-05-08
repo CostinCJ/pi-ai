@@ -3,7 +3,6 @@ from collections import deque
 from datetime import datetime, timezone
 import db_helpers
 import schedule as uni_schedule
-import spotify_sync
 import weather_sync
 from network_radar import phone_is_home
 from config import (
@@ -33,31 +32,6 @@ def has_class_soon_trigger():
     if db_helpers.was_proactive_attempted_today('class_soon', trigger_key):
         return False, ""
     return True, f"yo, {cls}", trigger_key
-
-
-def new_artist_trigger():
-    try:
-        current_raw = spotify_sync.get_recent_tracks()
-        if not current_raw or "unavailable" in current_raw.lower():
-            return False, ""
-        last_artist = db_helpers.get_proactive_state('last_artist')
-        if not last_artist:
-            return False, ""
-        if db_helpers.was_proactive_attempted_today('new_artist', last_artist):
-            return False, ""
-        with db_helpers.get_conn() as conn:
-            count = conn.execute(
-                "SELECT COUNT(*) FROM proactive_log "
-                "WHERE trigger_type='new_artist' AND trigger_key=? "
-                "AND timestamp > datetime('now', '-7 days')",
-                (last_artist,)
-            ).fetchone()[0]
-        if count > 0:
-            return False, ""
-        trigger_context = f"noticed {last_artist} in the user's recent tracks — first time in over a week, bring it up"
-        return True, trigger_context, last_artist
-    except Exception:
-        return False, ""
 
 
 def weather_flip_trigger():
@@ -153,6 +127,7 @@ def free_reasoning_trigger():
     summary = db_helpers.get_rolling_summary() or "(no summary)"
     last = db_helpers.get_last_ai_message()
     last_text = f"{last['text']} ({last['timestamp']})" if last else "(none)"
+    spotify = db_helpers.get_recent_spotify(limit=10)
 
     from llm import chat
     from persona import get_vibe
@@ -160,6 +135,7 @@ def free_reasoning_trigger():
     messages = [
         {"role": "system", "content": (
             f"Time: {datetime.now().strftime('%a %d %b, %H:%M')} | Vibe: {get_vibe()}\n\n"
+            f"Recent listening: {spotify or '(none)'}\n\n"
             f"Daily signals (last 7 days):\n{signal_text}\n\n"
             f"Recent patterns:\n{patterns}\n\n"
             f"Open threads:\n{thread_text}\n\n"
@@ -256,7 +232,6 @@ def home_arrival_trigger():
 
 ALL_TRIGGERS = [
     ('class_soon',      has_class_soon_trigger),
-    ('new_artist',      new_artist_trigger),
     ('session',         session_trigger),
     ('weather_flip',    weather_flip_trigger),
     ('late_night',      late_night_trigger),

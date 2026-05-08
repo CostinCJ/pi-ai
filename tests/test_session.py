@@ -126,7 +126,7 @@ BRAIN_APPS = [
 def test_build_context_includes_session_when_fresh(fake_db):
     with patch("brain.db_helpers.get_latest_session_snapshot", return_value=BRAIN_APPS), \
          patch("brain.db_helpers.get_user_facts", return_value="(no specific facts stored yet)"), \
-         patch("brain.spotify_sync.get_recent_tracks", return_value="unavailable"), \
+         patch("brain.db_helpers.get_recent_spotify", return_value=None), \
          patch("brain.db_helpers.get_recent_patterns", return_value="(no new patterns observed)"):
         ctx = brain._build_context_line("hey")
     assert "Session:" in ctx
@@ -137,7 +137,7 @@ def test_build_context_includes_session_when_fresh(fake_db):
 def test_build_context_skips_session_when_none(fake_db):
     with patch("brain.db_helpers.get_latest_session_snapshot", return_value=None), \
          patch("brain.db_helpers.get_user_facts", return_value="(no specific facts stored yet)"), \
-         patch("brain.spotify_sync.get_recent_tracks", return_value="unavailable"), \
+         patch("brain.db_helpers.get_recent_spotify", return_value=None), \
          patch("brain.db_helpers.get_recent_patterns", return_value="(no new patterns observed)"):
         ctx = brain._build_context_line("hey")
     assert "Session:" not in ctx
@@ -146,7 +146,7 @@ def test_build_context_skips_session_when_none(fake_db):
 def test_build_proactive_context_includes_session_when_fresh(fake_db):
     with patch("brain.db_helpers.get_latest_session_snapshot", return_value=BRAIN_APPS), \
          patch("brain.db_helpers.get_user_facts", return_value="(no specific facts stored yet)"), \
-         patch("brain.spotify_sync.get_recent_tracks", return_value="unavailable"), \
+         patch("brain.db_helpers.get_recent_spotify", return_value=None), \
          patch("brain.db_helpers.get_recent_patterns", return_value="(no new patterns observed)"):
         ctx = brain._build_proactive_context()
     assert "Session:" in ctx
