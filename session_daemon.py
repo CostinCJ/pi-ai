@@ -15,6 +15,7 @@ SESSION_SERVER_URL = os.environ.get(
 )
 SESSION_SHARED_SECRET = os.environ.get('SESSION_SHARED_SECRET', '')
 SHUTDOWN_PORT = int(os.environ.get('SHUTDOWN_PORT', '8766'))
+NOTIFY_PORT = int(os.environ.get('NOTIFY_PORT', '8767'))
 
 SYSTEM_PROCESSES = {
     'system', 'registry', 'smss.exe', 'csrss.exe', 'wininit.exe',
@@ -79,6 +80,35 @@ class _ShutdownHandler(BaseHTTPRequestHandler):
         pass
 
 
+class _NotifyHandler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        if self.path != "/notify":
+            self.send_response(404); self.end_headers(); return
+        if SESSION_SHARED_SECRET:
+            token = self.headers.get("X-Session-Token", "")
+            if token != SESSION_SHARED_SECRET:
+                self.send_response(401); self.end_headers(); return
+        length = int(self.headers.get("Content-Length", 0))
+        body = json.loads(self.rfile.read(length))
+        text = body.get("text", "")[:200]
+        try:
+            subprocess.run(["notify-send", "Lache", text], timeout=5, capture_output=True)
+        except Exception:
+            logging.info(f"notify: {text}")
+        self.send_response(200); self.end_headers()
+
+    def log_message(self, format, *args):
+        pass
+
+
+def _run_notify_server():
+    if not SESSION_SHARED_SECRET:
+        return
+    server = HTTPServer(("0.0.0.0", NOTIFY_PORT), _NotifyHandler)
+    logging.info(f"notify listener on :{NOTIFY_PORT}")
+    server.serve_forever()
+
+
 def _run_shutdown_server():
     if not SESSION_SHARED_SECRET:
         logging.error("shutdown listener disabled: SESSION_SHARED_SECRET is required")
@@ -91,6 +121,7 @@ def _run_shutdown_server():
 def main():
     logging.info("session daemon started")
     threading.Thread(target=_run_shutdown_server, daemon=True).start()
+    threading.Thread(target=_run_notify_server, daemon=True).start()
     headers = {}
     if SESSION_SHARED_SECRET:
         headers['X-Session-Token'] = SESSION_SHARED_SECRET

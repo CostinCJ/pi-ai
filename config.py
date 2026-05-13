@@ -54,6 +54,7 @@ TAILSCALE_IP = _opt("TAILSCALE_IP", "100.64.0.1")
 SESSION_SERVER_PORT = int(_opt("SESSION_SERVER_PORT", "8765"))
 SHUTDOWN_PORT = int(_opt("SHUTDOWN_PORT", "8766"))
 SESSION_SHARED_SECRET = _opt("SESSION_SHARED_SECRET", "")  # optional defense-in-depth
+DESKTOP_PUSH_URL = _opt("DESKTOP_PUSH_URL", "")  # e.g. http://100.x.x.x:8767/notify
 
 # --- Schedule anchor ---
 # A known săpt-1 Monday: ISO Monday in săpt 1. Override with config if needed.
