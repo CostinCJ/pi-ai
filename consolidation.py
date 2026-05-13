@@ -96,6 +96,7 @@ TASK:
 5. List up to 3 main topics discussed.
 6. List any open threads (things user expressed intent about that weren't resolved).
 7. Write a ~250 char rolling summary of the full conversation arc for future context.
+8. Note 0-2 recurring behavioral patterns visible today (e.g. "user messages at night", "user codes before exams"). Empty list if none.
 
 Output strictly as JSON:
 {{
@@ -105,7 +106,8 @@ Output strictly as JSON:
     "energy": 3,
     "main_topics": ["topic1", "topic2"],
     "open_threads": ["wants to fix the guitar amp"],
-    "rolling_summary": "Short rolling summary of what was discussed today."
+    "rolling_summary": "Short rolling summary of what was discussed today.",
+    "patterns": ["short behavioral pattern or empty list"]
 }}"""
 
     messages = [
@@ -114,7 +116,7 @@ Output strictly as JSON:
     ]
     data = _retry(
         lambda: chat_json(messages, {"temperature": 0.2, "format": "json"},
-                          schema_keys=["facts", "summary"], timeout=120),
+                          schema_keys=["facts", "summary", "patterns"], timeout=120),
         label="consolidation_main"
     )
     if data is None:
@@ -156,7 +158,18 @@ Output strictly as JSON:
         if rolling:
             db_helpers.set_rolling_summary(rolling)
 
-        logging.info(f"Daily consolidation complete. Facts: {len(data.get('facts', {}))} Mood: {data.get('mood')}")
+        with db_helpers.get_conn() as conn:
+            existing = db_helpers.get_recent_patterns(limit=20)
+            new_count = 0
+            for pattern in data.get("patterns", []):
+                if pattern and pattern.strip() and pattern not in existing:
+                    conn.execute(
+                        "INSERT INTO pattern_log (pattern_description) VALUES (?)",
+                        (pattern.strip(),),
+                    )
+                    new_count += 1
+
+        logging.info(f"Daily consolidation complete. Facts: {len(data.get('facts', {}))} Mood: {data.get('mood')} Patterns: {new_count}")
     except Exception as e:
         logging.error(f"Consolidation DB write failed: {e}", exc_info=True)
 
