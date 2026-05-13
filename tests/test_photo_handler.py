@@ -78,3 +78,40 @@ async def test_handle_photo_rejected_from_wrong_chat(fake_db, monkeypatch):
 
     await bot.handle_photo(update, ctx)
     update.message.reply_text.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_photo_rejects_oversize(fake_db, monkeypatch):
+    import bot, brain
+
+    photo_mock = MagicMock()
+    photo_mock.file_id = "file_big"
+
+    update = MagicMock()
+    update.message.chat_id = 123
+    update.message.photo = [photo_mock]
+    update.message.caption = "ce e aici?"
+    update.message.reply_text = AsyncMock()
+
+    ctx = MagicMock()
+    mock_file = MagicMock()
+    # Return > 8 MiB
+    mock_file.download_as_bytearray = AsyncMock(return_value=bytearray(b"\x00" * (8 * 1024 * 1024 + 1)))
+    ctx.bot.get_file = AsyncMock(return_value=mock_file)
+    ctx.bot.send_chat_action = AsyncMock()
+
+    called = []
+
+    def fake_agentic(user_message, image_data=None):
+        called.append(True)
+        return "whatever"
+
+    monkeypatch.setattr(brain, "generate_agentic_reply", fake_agentic)
+    monkeypatch.setattr(bot, "_ALLOWED_CHAT_ID", 123)
+
+    await bot.handle_photo(update, ctx)
+
+    assert not called, "vision call should be skipped for oversize image"
+    update.message.reply_text.assert_called_once()
+    reply = update.message.reply_text.call_args[0][0]
+    assert "prea greu" in reply or "mai mic" in reply

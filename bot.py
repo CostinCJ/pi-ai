@@ -136,6 +136,11 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         file = await context.bot.get_file(update.message.photo[-1].file_id)
         image_bytes = await file.download_as_bytearray()
+        MAX_PHOTO_BYTES = 8 * 1024 * 1024  # 8 MiB raw
+        if len(image_bytes) > MAX_PHOTO_BYTES:
+            await update.message.reply_text("ăla-i prea greu, trimite-mi una mai mică")
+            db_helpers.log_message("system", "[photo rejected: oversize]")
+            return
         image_data = base64.b64encode(bytes(image_bytes)).decode('utf-8')
     except Exception as e:
         _log.error(f"photo download failed: {e}")
