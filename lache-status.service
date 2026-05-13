@@ -1,0 +1,13 @@
+[Unit]
+Description=Lache status API for Homepage
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/pi-ai
+ExecStart=/home/pi/pi-ai/venv/bin/python /home/pi/pi-ai/scripts/lache_status_api.py
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
