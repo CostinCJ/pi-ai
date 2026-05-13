@@ -34,22 +34,25 @@ def _validate(payload):
 
 class SessionHandler(BaseHTTPRequestHandler):
     def do_POST(self):
-        if self.path != '/session':
-            self.send_response(404)
-            self.end_headers()
-            return
-
-        # Optional shared-secret check for defense-in-depth on top of Tailscale ACLs.
         if SESSION_SHARED_SECRET:
-            sent = self.headers.get('X-Session-Token', '')
+            sent = self.headers.get("X-Session-Token", "")
             if sent != SESSION_SHARED_SECRET:
                 logging.warning("rejected: bad/missing X-Session-Token")
                 self.send_response(401)
                 self.end_headers()
                 return
 
+        if self.path == "/session":
+            self._handle_session()
+        elif self.path == "/battery":
+            self._handle_battery()
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def _handle_session(self):
         try:
-            length = int(self.headers.get('Content-Length', 0))
+            length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length)
             payload = json.loads(body)
         except Exception as e:
@@ -64,8 +67,31 @@ class SessionHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
-        db_helpers.log_session_snapshot(payload['apps'])
+        db_helpers.log_session_snapshot(payload["apps"])
         logging.info(f"accepted: {len(payload['apps'])} apps")
+        self.send_response(200)
+        self.end_headers()
+
+    def _handle_battery(self):
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
+            payload = json.loads(body)
+            level = int(payload.get("level", 0))
+            charging = bool(payload.get("charging", False))
+        except Exception as e:
+            logging.warning(f"battery parse error: {e}")
+            self.send_response(400)
+            self.end_headers()
+            return
+
+        if not (0 <= level <= 100):
+            self.send_response(400)
+            self.end_headers()
+            return
+
+        db_helpers.log_battery(level, charging)
+        logging.info(f"battery: {level}% charging={charging}")
         self.send_response(200)
         self.end_headers()
 

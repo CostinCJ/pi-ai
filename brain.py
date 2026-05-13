@@ -98,6 +98,13 @@ def _build_proactive_context(spotify_clean=None):
     session = _format_session(db_helpers.get_latest_session_snapshot())
     if session:
         parts.append(session)
+    last_presence = db_helpers.get_last_presence_event()
+    if last_presence:
+        parts.append(f"User location: {last_presence['event']} ({last_presence['timestamp']})")
+    battery = db_helpers.get_last_battery()
+    if battery:
+        charge_state = "charging" if battery["charging"] else "not charging"
+        parts.append(f"Phone battery: {battery['level']}% ({charge_state})")
     return " | ".join(parts) if parts else ""
 
 

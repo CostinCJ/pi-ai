@@ -298,6 +298,24 @@ def get_last_presence_event():
     return {"event": row[0], "timestamp": row[1]} if row else None
 
 
+def log_battery(level: int, charging: bool) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO phone_battery_log (level, charging) VALUES (?, ?)",
+            (int(level), 1 if charging else 0),
+        )
+
+
+def get_last_battery() -> dict | None:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT timestamp, level, charging FROM phone_battery_log ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    if not row:
+        return None
+    return {"timestamp": row[0], "level": row[1], "charging": bool(row[2])}
+
+
 def log_session_snapshot(apps):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with get_conn() as conn:

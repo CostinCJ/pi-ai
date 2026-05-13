@@ -161,7 +161,17 @@ def setup_database():
         )
     """)
 
-    # 15. Riot match log
+    # 15. Phone battery log
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS phone_battery_log (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            level       INTEGER,
+            charging    INTEGER
+        )
+    """)
+
+    # 16. Riot match log
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS riot_match_log (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
