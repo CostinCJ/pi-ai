@@ -161,6 +161,22 @@ def setup_database():
         )
     """)
 
+    # 15. Riot match log
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS riot_match_log (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            match_id    TEXT UNIQUE,
+            played_at   TIMESTAMP,
+            win         INTEGER,
+            kills       INTEGER,
+            deaths      INTEGER,
+            assists     INTEGER,
+            champion    TEXT,
+            queue_type  TEXT,
+            logged_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     # Migrations on user_facts
     for sql in [
         "ALTER TABLE user_facts ADD COLUMN source TEXT DEFAULT 'unknown'",

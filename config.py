@@ -56,6 +56,12 @@ SHUTDOWN_PORT = int(_opt("SHUTDOWN_PORT", "8766"))
 SESSION_SHARED_SECRET = _opt("SESSION_SHARED_SECRET", "")  # optional defense-in-depth
 DESKTOP_PUSH_URL = _opt("DESKTOP_PUSH_URL", "")  # e.g. http://100.x.x.x:8767/notify
 
+# --- League of Legends (Riot API) ---
+RIOT_API_KEY = _opt("RIOT_API_KEY", "")
+RIOT_PUUID = _opt("RIOT_PUUID", "")
+RIOT_REGION = _opt("RIOT_REGION", "europe")
+RIOT_PLATFORM = _opt("RIOT_PLATFORM", "eun1")
+
 # --- Schedule anchor ---
 # A known săpt-1 Monday: ISO Monday in săpt 1. Override with config if needed.
 # Default uses 2026-04-27 (ISO week 18) as a săpt 1 Monday.

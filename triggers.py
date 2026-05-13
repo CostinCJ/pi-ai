@@ -8,7 +8,9 @@ from network_radar import phone_is_home
 from config import (
     AWAY_THRESHOLD_MIN, AWAY_DEBOUNCE_SCANS,
     PATTERN_TRIGGER_PROBABILITY,
+    RIOT_PUUID,
 )
+import riot_client
 
 
 def _utc_to_local(ts_str):
@@ -230,6 +232,35 @@ def home_arrival_trigger():
         return False, ""
 
 
+def post_game_trigger():
+    if not RIOT_PUUID:
+        return False, ""
+    ids = riot_client.get_recent_match_ids(RIOT_PUUID, count=1)
+    if not ids:
+        return False, ""
+    match_id = ids[0]
+    dedup_key = f"post_game_{match_id}"
+    if db_helpers.was_proactive_attempted_today("post_game", dedup_key):
+        return False, ""
+    m = riot_client.get_match(match_id)
+    if not m or "info" not in m:
+        return False, ""
+    me = next((p for p in m["info"]["participants"] if p["puuid"] == RIOT_PUUID), None)
+    if not me:
+        return False, ""
+    with db_helpers.get_conn() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO riot_match_log "
+            "(match_id, played_at, win, kills, deaths, assists, champion, queue_type) "
+            "VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?)",
+            (match_id, int(me["win"]), me["kills"], me["deaths"],
+             me["assists"], me["championName"], str(m["info"]["queueId"])),
+        )
+    outcome = "win" if me["win"] else "loss"
+    msg = f"{outcome} pe {me['championName']} — {me['kills']}/{me['deaths']}/{me['assists']}"
+    return True, msg, dedup_key
+
+
 ALL_TRIGGERS = [
     ('class_soon',          has_class_soon_trigger),
     ('session',             session_trigger),
@@ -237,4 +268,5 @@ ALL_TRIGGERS = [
     ('late_night',          late_night_trigger),
     ('free_reasoning',      free_reasoning_trigger),
     ('pattern_surface',     pattern_surface_trigger),
+    ('post_game',           post_game_trigger),
 ]

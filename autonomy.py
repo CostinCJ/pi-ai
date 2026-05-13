@@ -20,6 +20,8 @@ from config import (
 from triggers import ALL_TRIGGERS, home_arrival_trigger
 from llm import chat_with_retry
 from persona import PERSONA, get_vibe
+import riot_client
+import config as _config
 
 _handler = RotatingFileHandler(
     os.path.join(str(LOG_DIR), 'autonomy.log'),
@@ -145,6 +147,10 @@ def heartbeat():
         return
     if db_helpers.was_recently_active(minutes=RECENT_ACTIVE_COOLDOWN_MIN):
         logging.info("tick: recently active, skipped")
+        return
+
+    if riot_client.is_in_game(_config.RIOT_PUUID):
+        logging.info("tick: user in LoL game, skipped")
         return
 
     fired_type = None
