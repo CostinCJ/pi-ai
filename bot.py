@@ -9,6 +9,7 @@ from config import (
     SHUTDOWN_PORT, SESSION_SHARED_SECRET, LOG_DIR,
     APP_LOG_MAX_BYTES, APP_LOG_BACKUPS,
     ECHO_OVERLAP_THRESHOLD, ECHO_MIN_USER_WORDS,
+    VOICE_MAX_SECONDS,
 )
 
 _log = logging.getLogger('bot')
@@ -25,6 +26,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes
 import db_helpers
 import brain
+import llm
 import threading
 import reflection
 import consolidation
@@ -165,6 +167,41 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         _log.error(f"reply_text failed: {e}", exc_info=True)
 
     threading.Thread(target=llm_facts.extract_and_store_facts, daemon=True).start()
+
+
+async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update):
+        return
+    voice = update.message.voice
+    if not voice or voice.duration > VOICE_MAX_SECONDS:
+        await update.message.reply_text(f"prea lung — ține-o sub {VOICE_MAX_SECONDS}s")
+        return
+    chat_id = update.message.chat_id
+    await context.bot.send_chat_action(chat_id=chat_id, action='typing')
+
+    try:
+        tg_file = await context.bot.get_file(voice.file_id)
+        audio = bytes(await tg_file.download_as_bytearray())
+    except Exception as e:
+        _log.error(f"voice download failed: {e}")
+        await update.message.reply_text(random.choice(IN_CHARACTER_FALLBACKS))
+        return
+
+    text = llm.transcribe_voice(audio)
+    if not text:
+        await update.message.reply_text("n-am putut transcrie audio")
+        return
+
+    db_helpers.log_message("user", f"[voice] {text}")
+    reply = brain.generate_agentic_reply(text)
+    if not reply or not reply.strip():
+        reply = random.choice(IN_CHARACTER_FALLBACKS)
+
+    db_helpers.log_message("lache", reply)
+    try:
+        await update.message.reply_text(reply)
+    except Exception as e:
+        _log.error(f"voice reply failed: {e}", exc_info=True)
 
 
 async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -569,6 +606,7 @@ if __name__ == '__main__':
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
     app.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, handle_photo))
+    app.add_handler(MessageHandler(filters.VOICE, handle_voice))
     app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("ping", cmd_ping))
     app.add_handler(CommandHandler("mood", cmd_mood))

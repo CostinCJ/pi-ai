@@ -32,6 +32,8 @@ LOG_DIR = BASE_DIR
 GROQ_API_KEY = _req("GROQ_API_KEY")
 GROQ_MODEL = _opt("GROQ_MODEL", "llama-3.3-70b-versatile")
 GROQ_VISION_MODEL  = _opt("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
+GROQ_WHISPER_MODEL = _opt("GROQ_WHISPER_MODEL", "whisper-large-v3-turbo")
+VOICE_MAX_SECONDS = int(_opt("VOICE_MAX_SECONDS", "60"))
 SEARCH_MAX_RESULTS = int(_opt("SEARCH_MAX_RESULTS", "3"))
 
 # --- Telegram ---

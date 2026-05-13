@@ -1,11 +1,13 @@
+import io
 import time
 import json
 import re
 import os
 import inspect
+import logging
 import groq as _groq
 from config import (
-    GROQ_API_KEY, GROQ_MODEL, LOG_DIR, LLM_LOG_MAX_BYTES,
+    GROQ_API_KEY, GROQ_MODEL, GROQ_WHISPER_MODEL, LOG_DIR, LLM_LOG_MAX_BYTES,
     IN_CHARACTER_MAX_CHARS, IN_CHARACTER_MAX_CHARS_LONG,
 )
 
@@ -221,3 +223,22 @@ def chat_with_tools(messages, tools, options=None, timeout=60, model=None):
     except Exception as e:
         _log(caller, (time.time() - t0) * 1000, False, f"err={type(e).__name__}")
         return None, None, None, None
+
+
+def transcribe_voice(audio_bytes: bytes) -> str | None:
+    if not audio_bytes:
+        return None
+    try:
+        buf = io.BytesIO(audio_bytes)
+        buf.name = "voice.ogg"
+        resp = _client.audio.transcriptions.create(
+            file=buf,
+            model=GROQ_WHISPER_MODEL,
+            response_format="text",
+        )
+        if isinstance(resp, str):
+            return resp.strip() or None
+        return getattr(resp, "text", "").strip() or None
+    except Exception:
+        logging.getLogger(__name__).warning("whisper failure", exc_info=True)
+        return None
