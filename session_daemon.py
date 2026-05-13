@@ -88,9 +88,13 @@ class _NotifyHandler(BaseHTTPRequestHandler):
             token = self.headers.get("X-Session-Token", "")
             if token != SESSION_SHARED_SECRET:
                 self.send_response(401); self.end_headers(); return
-        length = int(self.headers.get("Content-Length", 0))
-        body = json.loads(self.rfile.read(length))
-        text = body.get("text", "")[:200]
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length))
+            text = str(body.get("text", ""))[:200]
+        except Exception as e:
+            logging.warning(f"notify parse error: {e}")
+            self.send_response(400); self.end_headers(); return
         try:
             subprocess.run(["notify-send", "Lache", text], timeout=5, capture_output=True)
         except Exception:
@@ -103,6 +107,7 @@ class _NotifyHandler(BaseHTTPRequestHandler):
 
 def _run_notify_server():
     if not SESSION_SHARED_SECRET:
+        logging.warning("notify listener disabled: SESSION_SHARED_SECRET is required")
         return
     server = HTTPServer(("0.0.0.0", NOTIFY_PORT), _NotifyHandler)
     logging.info(f"notify listener on :{NOTIFY_PORT}")

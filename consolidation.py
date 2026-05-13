@@ -159,14 +159,18 @@ Output strictly as JSON:
             db_helpers.set_rolling_summary(rolling)
 
         with db_helpers.get_conn() as conn:
-            existing = db_helpers.get_recent_patterns(limit=20)
+            rows = conn.execute(
+                "SELECT pattern_description FROM pattern_log ORDER BY id DESC LIMIT 20"
+            ).fetchall()
+            existing = {r[0] for r in rows}
             new_count = 0
             for pattern in data.get("patterns", []):
-                if pattern and pattern.strip() and pattern not in existing:
+                if pattern and pattern.strip() and pattern.strip() not in existing:
                     conn.execute(
                         "INSERT INTO pattern_log (pattern_description) VALUES (?)",
                         (pattern.strip(),),
                     )
+                    existing.add(pattern.strip())
                     new_count += 1
 
         logging.info(f"Daily consolidation complete. Facts: {len(data.get('facts', {}))} Mood: {data.get('mood')} Patterns: {new_count}")

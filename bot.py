@@ -197,7 +197,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not reply or not reply.strip():
         reply = random.choice(IN_CHARACTER_FALLBACKS)
 
-    db_helpers.log_message("lache", reply)
+    db_helpers.log_message("ai", reply)
     try:
         await update.message.reply_text(reply)
     except Exception as e:
