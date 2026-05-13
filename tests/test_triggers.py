@@ -115,3 +115,8 @@ def test_free_reasoning_trigger_handles_llm_exception(fake_db, monkeypatch):
     monkeypatch.setattr(llm, "chat", raise_err)
     result = triggers.free_reasoning_trigger()
     assert result[0] is False
+
+
+def test_pattern_surface_trigger_in_all_triggers():
+    keys = [t[0] for t in triggers.ALL_TRIGGERS]
+    assert "pattern_surface" in keys

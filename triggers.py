@@ -231,9 +231,10 @@ def home_arrival_trigger():
 
 
 ALL_TRIGGERS = [
-    ('class_soon',      has_class_soon_trigger),
-    ('session',         session_trigger),
-    ('weather_flip',    weather_flip_trigger),
-    ('late_night',      late_night_trigger),
-    ('free_reasoning',  free_reasoning_trigger),
+    ('class_soon',          has_class_soon_trigger),
+    ('session',             session_trigger),
+    ('weather_flip',        weather_flip_trigger),
+    ('late_night',          late_night_trigger),
+    ('free_reasoning',      free_reasoning_trigger),
+    ('pattern_surface',     pattern_surface_trigger),
 ]
