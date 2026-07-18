@@ -23,8 +23,8 @@ Architecture: **retrofit the existing engine** (autonomy.py APScheduler + bot.py
 ## Section 1 — Delivery core + briefing
 
 ### Trigger cleanup
-- `ALL_TRIGGERS` shrinks to `post_game` only.
-- **Delete** (code, not disable): `free_reasoning_trigger`, `pattern_surface_trigger`, `late_night_trigger`, `session_trigger`, `weather_flip_trigger`, and their tests.
+- `ALL_TRIGGERS` shrinks to `class_soon` + `post_game` (class_soon is real info — 1h heads-up before a class, semester-gated; the briefing covers the morning view, this covers the moment).
+- **Delete** (code, not disable): `free_reasoning_trigger`, `pattern_surface_trigger`, `late_night_trigger`, `session_trigger`, `weather_flip_trigger`, `open_thread_trigger` (dead code — not in ALL_TRIGGERS since May), and their tests.
 - `home_arrival_trigger` stays unchanged on the 2-min presence job (it had the best reply rate; "back at 4am again?" is the one flavor message that survives).
 - Engagement gate (`engagement_level` / `proactive_allowed`) stays as a safety net **for trigger-class sends only** (home_arrival, post_game). The briefing, reminders, and urgent watcher alerts bypass it — they are requested utility, not ambient chatter, and must fire regardless of reply history.
 
