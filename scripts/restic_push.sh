@@ -14,6 +14,7 @@
 #   5. Add to crontab:
 #      (crontab -l; echo "0 5 * * 0 /home/pi/pi-ai/scripts/restic_push.sh") | crontab -
 set -euo pipefail
+trap '/home/pi/pi-ai/scripts/tg_alert.sh "⚠️ weekly restic backup FAILED — see restic.log" || true' ERR
 
 # Load env (B2_ACCOUNT_ID, B2_ACCOUNT_KEY, RESTIC_PASSWORD)
 set -a; source /home/pi/pi-ai/.env; set +a
@@ -24,6 +25,12 @@ LOG="/home/pi/pi-ai/restic.log"
 # Dump crontab for backup
 mkdir -p /home/pi/backups
 crontab -l > /home/pi/backups/crontab.txt 2>/dev/null || true
+
+# Refuse to run without a fresh DB dump — a silent gap here went unnoticed for 2 months once.
+if [ -z "$(find /home/pi/backups/pi-ai -name 'memory-*.db.gz' -mtime -2 2>/dev/null)" ]; then
+  echo "[$(date -Iseconds)] ABORT: no recent memory.db dump in /home/pi/backups/pi-ai" >> "$LOG"
+  false
+fi
 
 echo "[$(date -Iseconds)] restic backup start" >> "$LOG"
 
