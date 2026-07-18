@@ -10,7 +10,7 @@ import db_helpers
 from outbox import send_telegram_message, is_repeat
 import spotify_sync
 from config import (
-    TELEGRAM_TOKEN, CHAT_ID, LOG_DIR,
+    LOG_DIR,
     APP_LOG_MAX_BYTES, APP_LOG_BACKUPS,
     HEARTBEAT_INTERVAL_MIN, PRESENCE_INTERVAL_MIN,
     QUIET_HOURS_START, QUIET_HOURS_END,

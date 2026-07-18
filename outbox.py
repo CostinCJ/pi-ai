@@ -47,9 +47,13 @@ def is_repeat(message):
 def send(text, urgency="urgent", suppress_repeats=True):
     """Route a message. Returns True if delivered (or queued)."""
     if urgency == "briefing":
-        with db_helpers.get_conn() as conn:
-            conn.execute("INSERT INTO outbox_queue (text) VALUES (?)", (text,))
-        return True
+        try:
+            with db_helpers.get_conn() as conn:
+                conn.execute("INSERT INTO outbox_queue (text) VALUES (?)", (text,))
+            return True
+        except Exception as e:
+            log.error(f"outbox: failed to queue briefing message: {e}")
+            return False
     if suppress_repeats and is_repeat(text):
         log.info(f"outbox: suppressed repeat: {text[:60]}")
         return False
@@ -59,17 +63,21 @@ def send(text, urgency="urgent", suppress_repeats=True):
 def drain_queue():
     """Unconsumed briefing items, oldest first; marks them consumed.
     Items older than 48h are dropped — stale news isn't news."""
-    with db_helpers.get_conn() as conn:
-        conn.execute(
-            "DELETE FROM outbox_queue WHERE created_at < datetime('now', '-48 hours')"
-        )
-        rows = conn.execute(
-            "SELECT id, text FROM outbox_queue WHERE consumed=0 ORDER BY id"
-        ).fetchall()
-        if rows:
-            ids = [r[0] for r in rows]
+    try:
+        with db_helpers.get_conn() as conn:
             conn.execute(
-                f"UPDATE outbox_queue SET consumed=1 WHERE id IN ({','.join('?' * len(ids))})",
-                ids,
+                "DELETE FROM outbox_queue WHERE created_at < datetime('now', '-48 hours')"
             )
-    return [r[1] for r in rows]
+            rows = conn.execute(
+                "SELECT id, text FROM outbox_queue WHERE consumed=0 ORDER BY id"
+            ).fetchall()
+            if rows:
+                ids = [r[0] for r in rows]
+                conn.execute(
+                    f"UPDATE outbox_queue SET consumed=1 WHERE id IN ({','.join('?' * len(ids))})",
+                    ids,
+                )
+        return [r[1] for r in rows]
+    except Exception as e:
+        log.error(f"drain_queue failed: {e}")
+        return []
