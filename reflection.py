@@ -18,14 +18,21 @@ MAX_LOG_CHARS = 6000
 
 
 def _retry(fn, attempts=3, base_delay=10, label="op"):
+    """Retries on exception OR on a None result (chat_json signals failure by
+    returning None, it never raises — treating None as success meant this
+    never actually retried)."""
     for i in range(attempts):
         try:
-            return fn()
+            result = fn()
+            if result is not None:
+                return result
+            err = "returned None (LLM call or JSON parse failed — see llm.log)"
         except Exception as e:
-            wait = base_delay * (2 ** i)
-            logging.error(f"{label} attempt {i+1}/{attempts} failed: {type(e).__name__}: {e}; sleeping {wait}s")
-            if i + 1 < attempts:
-                time.sleep(wait)
+            err = f"{type(e).__name__}: {e}"
+        wait = base_delay * (2 ** i)
+        logging.error(f"{label} attempt {i+1}/{attempts} failed: {err}; sleeping {wait}s")
+        if i + 1 < attempts:
+            time.sleep(wait)
     return None
 
 
@@ -103,8 +110,10 @@ Output strictly as JSON:
         {"role": "system", "content": "You are a precise JSON extractor. Output only valid JSON."},
         {"role": "user", "content": prompt}
     ]
+    # num_predict is required: llm.chat() defaults to max_tokens=150, which
+    # truncated the JSON mid-string and made every weekly run fail May–Jul 2026.
     data = _retry(
-        lambda: chat_json(messages, {"temperature": 0.3, "format": "json"},
+        lambda: chat_json(messages, {"temperature": 0.3, "format": "json", "num_predict": 1200},
                           schema_keys=["updated_profile", "patterns"], timeout=180),
         label="reflection_main"
     )

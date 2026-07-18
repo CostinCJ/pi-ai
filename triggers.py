@@ -145,9 +145,13 @@ def free_reasoning_trigger():
             f"Last message you sent: {last_text}\n\n"
             "You are Lache. Given the above context about the user's recent week, "
             "do you notice something specific and genuine worth bringing up right now? "
+            "The bar: your observation must name one concrete item from the data above — "
+            "a specific artist/track, a dated event, a named pattern or thread. "
             "If yes, write a short context string (e.g. 'user mentioned wanting to "
             "learn guitar 3 days ago, hasn't brought it up since'). "
-            "If there's nothing genuine to surface, reply with the single word SILENCE."
+            "Generic check-ins are worthless and forbidden: anything like 'what's new', "
+            "'how's your day', 'it's late', 'been a calm week' — if that's all you have, "
+            "reply with the single word SILENCE. Silence is the correct answer most days."
         )},
         {"role": "user", "content": "what do you notice?"},
     ]

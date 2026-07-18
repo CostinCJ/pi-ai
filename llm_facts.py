@@ -11,12 +11,20 @@ Rules:
 - Only extract facts about the USER, never about Lache (the AI)
 - Only lasting facts — things that will still be true next week
 - Reject anything temporary: "is tired", "went out today", "is coding right now"
+- DO capture significant life events and relationships — these are lasting:
+  started dating someone, passed/failed an exam, got a job, quit something
 - Be conservative: no fact is better than a wrong or vague one
-- Keys: short snake_case, under 40 chars
-- Values: concise, under 80 chars
+- Keys: short snake_case, under 40 chars. Reuse an existing canonical key when
+  one fits instead of inventing a synonym: games, music_taste, studies, smokes,
+  instruments, relationship, commute, schedule_habits
+- Values must carry information, never bare "yes"/"no". Write
+  {{"key": "games", "value": "plays League of Legends"}} —
+  NOT {{"key": "plays_league", "value": "yes"}}
 
-Good examples: plays guitar, studies CS at UBB Cluj, plays League of Legends, owns a guitar amp
-Bad examples: is tired, went out today, had a long day, is coding, is bored
+Good examples: {{"key": "instruments", "value": "plays guitar"}},
+{{"key": "studies", "value": "CS at UBB Cluj"}},
+{{"key": "relationship", "value": "dating a girl, first kiss early May 2026"}}
+Bad examples: is tired, went out today, had a long day, plays_league: yes
 
 Conversation:
 {convo}

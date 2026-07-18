@@ -16,6 +16,9 @@ from config import (
     QUIET_HOURS_START, QUIET_HOURS_END,
     RECENT_ACTIVE_COOLDOWN_MIN,
     SPOTIFY_POLL_INTERVAL_MIN, SPOTIFY_TRACKS_KEEP_DAYS,
+    ENGAGEMENT_WINDOW, ENGAGEMENT_DEAD_WINDOW,
+    BACKOFF_IGNORED_MAX_PER_DAY, BACKOFF_DEAD_MAX_PER_DAY,
+    PROACTIVE_REPEAT_OVERLAP, PROACTIVE_REPEAT_DAYS,
 )
 from triggers import ALL_TRIGGERS, home_arrival_trigger
 from llm import chat_with_retry
@@ -31,6 +34,55 @@ _handler.setFormatter(logging.Formatter('%(asctime)s %(message)s'))
 logging.basicConfig(level=logging.INFO, handlers=[_handler])
 
 _PHRASING_OPTIONS = {"temperature": 0.4, "num_predict": 40}
+
+# Triggers still allowed when the user has stopped responding. Everything else
+# (free_reasoning, weather_flip, session, pattern_surface) is smalltalk-grade
+# and goes quiet until the user replies to something again.
+HIGH_VALUE_TRIGGERS = {'class_soon', 'home_arrival', 'post_game', 'late_night'}
+CORE_TRIGGERS = {'home_arrival', 'post_game'}
+
+
+def engagement_level():
+    """'engaged' | 'ignored' | 'dead', from replies to recent proactive sends.
+    A single user reply anywhere in the recent window restores 'engaged'."""
+    responded, total = db_helpers.proactive_engagement(ENGAGEMENT_DEAD_WINDOW)
+    if total < ENGAGEMENT_WINDOW or responded > 0:
+        recent_responded, recent_total = db_helpers.proactive_engagement(ENGAGEMENT_WINDOW)
+        if recent_total >= ENGAGEMENT_WINDOW and recent_responded == 0:
+            return 'ignored'
+        return 'engaged'
+    return 'dead' if total >= ENGAGEMENT_DEAD_WINDOW else 'ignored'
+
+
+def proactive_allowed(trigger_type, level=None):
+    """Engagement-aware gate: throttle trigger set and daily volume when the
+    user isn't replying. user_responded was tracked for months and never read
+    — 336 sends / 15 replies happened because nothing consumed it."""
+    level = level or engagement_level()
+    if level == 'engaged':
+        return True
+    if level == 'ignored':
+        return (trigger_type in HIGH_VALUE_TRIGGERS
+                and db_helpers.proactive_sent_count(hours=24) < BACKOFF_IGNORED_MAX_PER_DAY)
+    return (trigger_type in CORE_TRIGGERS
+            and db_helpers.proactive_sent_count(hours=24) < BACKOFF_DEAD_MAX_PER_DAY)
+
+
+def _word_overlap(a, b):
+    wa, wb = set(a.lower().split()), set(b.lower().split())
+    if not wa or not wb:
+        return 0.0
+    return len(wa & wb) / min(len(wa), len(wb))
+
+
+def _is_repeat(message):
+    """True if the phrased message is near-identical to a recently sent one.
+    Dedup keys only guard within a trigger+day; this catches 'still warm out
+    huh' being sent verbatim across different days."""
+    for prev in db_helpers.get_recent_proactive_texts(days=PROACTIVE_REPEAT_DAYS):
+        if _word_overlap(message, prev) >= PROACTIVE_REPEAT_OVERLAP:
+            return True
+    return False
 
 
 def _last_sent_label(last_sent):
@@ -127,6 +179,11 @@ def _handle_trigger_send(trigger_type, fired_context, fired_dedup_key, success_c
         db_helpers.mark_proactive_attempted(trigger_type, fired_dedup_key)
         return False
 
+    if _is_repeat(message):
+        logging.info(f"tick: trigger={trigger_type} suppressed repeat: {message[:60]}")
+        db_helpers.mark_proactive_attempted(trigger_type, fired_dedup_key)
+        return False
+
     db_helpers.log_message('ai', message)
     db_helpers.mark_proactive_attempted(trigger_type, fired_dedup_key)
     sent = send_telegram_message(message)
@@ -153,11 +210,15 @@ def heartbeat():
         logging.info("tick: user in LoL game, skipped")
         return
 
+    level = engagement_level()
+
     fired_type = None
     fired_context = None
     fired_dedup_key = None
     fired_extra = None
     for trigger_type, trigger_fn in ALL_TRIGGERS:
+        if not proactive_allowed(trigger_type, level):
+            continue
         try:
             result = trigger_fn()
             should_speak = result[0]
@@ -173,7 +234,7 @@ def heartbeat():
 
     if not fired_type:
         latency = int((_time.time() - t0) * 1000)
-        logging.info(f"tick: no trigger fired latency_ms={latency}")
+        logging.info(f"tick: no trigger fired latency_ms={latency} engagement={level}")
         return
 
     # open_thread defers update_thread_referenced until after a successful send.
@@ -199,6 +260,13 @@ def presence_check():
         return
 
     if not should_speak:
+        return
+
+    # The trigger fn must always run (it maintains presence_log), but the
+    # send still respects the engagement-aware daily cap.
+    if not proactive_allowed('home_arrival'):
+        logging.info("presence_check: send suppressed by engagement backoff")
+        db_helpers.mark_proactive_attempted('home_arrival', dedup_key)
         return
 
     _handle_trigger_send('home_arrival', context_str, dedup_key)

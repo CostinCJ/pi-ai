@@ -93,3 +93,27 @@ FACT_DECAY_FLOOR = float(_opt("FACT_DECAY_FLOOR", "0.2"))
 SPOTIFY_POLL_INTERVAL_MIN = int(_opt("SPOTIFY_POLL_INTERVAL_MIN", "3"))
 SPOTIFY_TRACKS_KEEP_DAYS = int(_opt("SPOTIFY_TRACKS_KEEP_DAYS", "30"))
 SPOTIFY_CONTEXT_LIMIT = int(_opt("SPOTIFY_CONTEXT_LIMIT", "10"))
+
+# --- Semester calendar ---
+# Comma-separated date ranges (start:end, inclusive) when classes actually run.
+# Outside these ranges class_soon never fires and /today reports break.
+# Update each semester. Defaults: sem 2 spring 2026, sem 1 autumn 2026 (adjust
+# start date when the official calendar is out).
+SEMESTER_RANGES = _opt("SEMESTER_RANGES", "2026-02-23:2026-06-07,2026-09-28:2026-12-20")
+
+# --- Engagement-aware proactive backoff ---
+# If the last ENGAGEMENT_WINDOW delivered proactive messages got zero replies,
+# Lache is being ignored: only high-value triggers, max BACKOFF_IGNORED_MAX_PER_DAY
+# sends/day. Zero replies over ENGAGEMENT_DEAD_WINDOW: core triggers only,
+# max BACKOFF_DEAD_MAX_PER_DAY/day. Any user reply resets to normal.
+ENGAGEMENT_WINDOW = int(_opt("ENGAGEMENT_WINDOW", "10"))
+ENGAGEMENT_DEAD_WINDOW = int(_opt("ENGAGEMENT_DEAD_WINDOW", "25"))
+BACKOFF_IGNORED_MAX_PER_DAY = int(_opt("BACKOFF_IGNORED_MAX_PER_DAY", "2"))
+BACKOFF_DEAD_MAX_PER_DAY = int(_opt("BACKOFF_DEAD_MAX_PER_DAY", "1"))
+
+# --- Proactive repeat suppression ---
+PROACTIVE_REPEAT_OVERLAP = float(_opt("PROACTIVE_REPEAT_OVERLAP", "0.6"))
+PROACTIVE_REPEAT_DAYS = int(_opt("PROACTIVE_REPEAT_DAYS", "14"))
+
+# --- Open thread expiry ---
+THREAD_MAX_AGE_DAYS = int(_opt("THREAD_MAX_AGE_DAYS", "30"))

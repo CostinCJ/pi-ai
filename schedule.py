@@ -1,10 +1,31 @@
 from datetime import datetime, date, timedelta
-from config import SAPT1_ANCHOR
+from config import SAPT1_ANCHOR, SEMESTER_RANGES
 
 
 def _anchor_date():
     """Returns the configured săpt-1 reference date as a `date`."""
     return datetime.strptime(SAPT1_ANCHOR, "%Y-%m-%d").date()
+
+
+def _semester_ranges():
+    ranges = []
+    for part in SEMESTER_RANGES.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        start_s, end_s = part.split(":")
+        ranges.append((
+            datetime.strptime(start_s.strip(), "%Y-%m-%d").date(),
+            datetime.strptime(end_s.strip(), "%Y-%m-%d").date(),
+        ))
+    return ranges
+
+
+def semester_active(today=None):
+    """True only inside a configured semester range. Outside (summer/winter
+    break, exam sessions past the end date) the timetable is dead."""
+    today = today or date.today()
+    return any(start <= today <= end for start, end in _semester_ranges())
 
 
 def is_sapt1():
@@ -53,6 +74,8 @@ def _slot_active(slot, sapt1):
 
 
 def get_todays_classes():
+    if not semester_active():
+        return "No classes — semester break."
     day = datetime.now().weekday()
     slots = TIMETABLE.get(day, [])
     if not slots:
@@ -67,6 +90,8 @@ def get_todays_classes():
 
 def get_next_class():
     """Returns the next upcoming class today, or None if none left."""
+    if not semester_active():
+        return None
     now = datetime.now()
     day = now.weekday()
     slots = TIMETABLE.get(day, [])

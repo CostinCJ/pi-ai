@@ -5,6 +5,7 @@ from config import (
     DB_PATH, SESSION_KEEP_ROWS, SESSION_STALE_SEC,
     PATTERN_LOG_MAX_ROWS, WEEKLY_PROFILE_MAX_ROWS,
     FACT_DECAY_DAYS, FACT_DECAY_FLOOR,
+    THREAD_MAX_AGE_DAYS,
 )
 
 SEED_PROFILE = "The user is a university student in Cluj-Napoca, Romania (EEST timezone)..."
@@ -250,6 +251,39 @@ def mark_user_response_received():
         pass
 
 
+def proactive_engagement(last_n):
+    """(responded, total) over the last `last_n` delivered proactive messages."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT user_responded FROM proactive_log "
+            "WHERE delivered=1 ORDER BY id DESC LIMIT ?",
+            (int(last_n),)
+        ).fetchall()
+    return sum(r[0] for r in rows), len(rows)
+
+
+def proactive_sent_count(hours=24):
+    """Delivered proactive messages in the last `hours` hours."""
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT COUNT(*) FROM proactive_log WHERE delivered=1 "
+            "AND timestamp > datetime('now', ?)",
+            (f'-{int(hours)} hours',)
+        ).fetchone()[0]
+
+
+def get_recent_proactive_texts(days=14, limit=30):
+    """Texts of recently sent proactive messages, for repeat suppression."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT message_sent FROM proactive_log "
+            "WHERE delivered=1 AND timestamp > datetime('now', ?) "
+            "ORDER BY id DESC LIMIT ?",
+            (f'-{int(days)} days', int(limit))
+        ).fetchall()
+    return [r[0] for r in rows if r[0]]
+
+
 def was_trigger_fired_today(trigger_type, trigger_key):
     with get_conn() as conn:
         count = conn.execute(
@@ -389,8 +423,15 @@ def decay_realtime_facts():
 
 
 def prune_long_lived_tables():
-    """Trim pattern_log and weekly_profile to configured caps."""
+    """Trim pattern_log and weekly_profile to configured caps; expire stale
+    open threads (reflection is supposed to close them, but a thread nobody
+    mentioned for THREAD_MAX_AGE_DAYS is dead either way)."""
     with get_conn() as conn:
+        conn.execute(
+            "UPDATE open_threads SET status='expired' WHERE status='open' "
+            "AND created_at < datetime('now', ?)",
+            (f'-{THREAD_MAX_AGE_DAYS} days',)
+        )
         conn.execute(
             "DELETE FROM pattern_log WHERE id NOT IN "
             "(SELECT id FROM pattern_log ORDER BY id DESC LIMIT ?)",
