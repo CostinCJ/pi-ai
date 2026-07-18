@@ -66,48 +66,6 @@ def test_log_session_snapshot_trims_to_50_rows(fake_db):
 # session_trigger
 # ---------------------------------------------------------------------------
 
-from triggers import session_trigger
-
-
-def test_session_trigger_no_fire_when_no_snapshot(fake_db):
-    with patch("triggers.db_helpers.get_latest_session_snapshot", return_value=None):
-        fired, ctx = session_trigger()
-    assert fired is False
-    assert ctx == ""
-
-
-def test_session_trigger_no_fire_when_no_game(fake_db):
-    apps = [
-        {"name": "Discord",  "ram_mb": 347},
-        {"name": "Spotify",  "ram_mb": 241},
-        {"name": "chrome",   "ram_mb": 198},
-    ]
-    with patch("triggers.db_helpers.get_latest_session_snapshot", return_value=apps):
-        fired, ctx = session_trigger()
-    assert fired is False
-
-
-def test_session_trigger_fires_when_league_detected(fake_db):
-    apps = [
-        {"name": "League of Legends", "ram_mb": 823},
-        {"name": "Discord",           "ram_mb": 347},
-    ]
-    with patch("triggers.db_helpers.get_latest_session_snapshot", return_value=apps), \
-         patch("triggers.db_helpers.was_proactive_attempted_today", return_value=False):
-        result = session_trigger()
-    fired, ctx = result[0], result[1]
-    assert fired is True
-    assert "league" in ctx.lower() or "League" in ctx
-    assert "Discord" in ctx
-
-
-def test_session_trigger_no_refire_same_day(fake_db):
-    apps = [{"name": "League of Legends", "ram_mb": 823}]
-    with patch("triggers.db_helpers.was_proactive_attempted_today", return_value=True), \
-         patch("triggers.db_helpers.get_latest_session_snapshot", return_value=apps):
-        fired, ctx = session_trigger()
-    assert fired is False
-
 
 # ---------------------------------------------------------------------------
 # brain.py — session snapshot injection

@@ -206,13 +206,7 @@ def heartbeat():
         logging.info(f"tick: no trigger fired latency_ms={latency} engagement={level}")
         return
 
-    # open_thread defers update_thread_referenced until after a successful send.
-    success_callback = None
-    if fired_type == 'open_thread' and fired_extra is not None:
-        thread_id = fired_extra
-        success_callback = lambda: db_helpers.update_thread_referenced(thread_id)
-
-    _handle_trigger_send(fired_type, fired_context, fired_dedup_key, success_callback)
+    _handle_trigger_send(fired_type, fired_context, fired_dedup_key)
     latency = int((_time.time() - t0) * 1000)
     logging.info(f"tick: handled trigger={fired_type} latency_ms={latency}")
 
