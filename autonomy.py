@@ -184,7 +184,6 @@ def heartbeat():
     fired_type = None
     fired_context = None
     fired_dedup_key = None
-    fired_extra = None
     for trigger_type, trigger_fn in ALL_TRIGGERS:
         if not proactive_allowed(trigger_type, level):
             continue
@@ -196,7 +195,6 @@ def heartbeat():
                 fired_type = trigger_type
                 fired_context = context_str
                 fired_dedup_key = result[2] if len(result) > 2 else context_str[:100]
-                fired_extra = result[3] if len(result) > 3 else None
                 break
         except Exception as e:
             logging.error(f"trigger {trigger_type} error: {e}")
