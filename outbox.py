@@ -38,10 +38,14 @@ def _word_overlap(a, b):
 
 def is_repeat(message):
     """True if near-identical to a recently sent proactive message."""
-    for prev in db_helpers.get_recent_proactive_texts(days=PROACTIVE_REPEAT_DAYS):
-        if _word_overlap(message, prev) >= PROACTIVE_REPEAT_OVERLAP:
-            return True
-    return False
+    try:
+        for prev in db_helpers.get_recent_proactive_texts(days=PROACTIVE_REPEAT_DAYS):
+            if _word_overlap(message, prev) >= PROACTIVE_REPEAT_OVERLAP:
+                return True
+        return False
+    except Exception as e:
+        log.error(f"outbox: is_repeat check failed: {e}")
+        return False
 
 
 def send(text, urgency="urgent", suppress_repeats=True):
