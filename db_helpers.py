@@ -462,6 +462,38 @@ def get_due_reminders():
     return [{"id": r[0], "text": r[1], "fire_at": r[2]} for r in rows]
 
 
+def get_reminders_due_today():
+    """Undelivered reminders firing later today (localtime) — briefing preview."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, text, fire_at FROM reminders "
+            "WHERE delivered=0 AND date(fire_at) = date('now', 'localtime') "
+            "ORDER BY fire_at ASC"
+        ).fetchall()
+    return [{"id": r[0], "text": r[1], "fire_at": r[2]} for r in rows]
+
+
+def spotify_played_within(minutes):
+    """True if a track was played in the last N minutes (played_at is localtime)."""
+    with get_conn() as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM spotify_tracks "
+            "WHERE played_at > datetime('now', 'localtime', ?)",
+            (f'-{int(minutes)} minutes',),
+        ).fetchone()[0]
+    return count > 0
+
+
+def user_messaged_today():
+    """True if the user sent any message today (UTC day — close enough)."""
+    with get_conn() as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM conversations "
+            "WHERE sender='user' AND timestamp >= date('now')"
+        ).fetchone()[0]
+    return count > 0
+
+
 def mark_reminder_delivered(reminder_id):
     with get_conn() as conn:
         conn.execute(

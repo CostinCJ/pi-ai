@@ -116,3 +116,8 @@ PROACTIVE_REPEAT_DAYS = int(_opt("PROACTIVE_REPEAT_DAYS", "14"))
 
 # --- Open thread expiry ---
 THREAD_MAX_AGE_DAYS = int(_opt("THREAD_MAX_AGE_DAYS", "30"))
+
+# --- Daily briefing ---
+BRIEFING_WINDOW_START = int(_opt("BRIEFING_WINDOW_START", "9"))
+BRIEFING_WINDOW_END = int(_opt("BRIEFING_WINDOW_END", "13"))  # send regardless at this hour
+BRIEFING_SPOTIFY_ACTIVE_MIN = int(_opt("BRIEFING_SPOTIFY_ACTIVE_MIN", "20"))
