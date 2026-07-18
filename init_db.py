@@ -209,6 +209,16 @@ def setup_database():
         except sqlite3.OperationalError:
             pass
 
+    # Outbox: non-urgent findings queue here and drain into the next briefing.
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS outbox_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        text TEXT NOT NULL,
+        consumed INTEGER DEFAULT 0
+    )
+    ''')
+
     conn.commit()
     conn.close()
     print(f"Brain initialized. Memory structure created at: {os.path.abspath(DB_PATH)}")

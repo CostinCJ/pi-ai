@@ -2,6 +2,7 @@ from datetime import date
 
 import db_helpers
 import autonomy
+import outbox
 import schedule as uni_schedule
 
 
@@ -61,13 +62,13 @@ def test_proactive_allowed_dead_core_only(fake_db):
 
 def test_repeat_suppression_catches_near_identical(fake_db):
     db_helpers.log_proactive("weather_flip", "k1", "still warm out huh", delivered=1)
-    assert autonomy._is_repeat("still warm out huh")
-    assert autonomy._is_repeat("it's still warm out huh")
-    assert not autonomy._is_repeat("cold front rolling in tonight, 12 degrees by morning")
+    assert outbox.is_repeat("still warm out huh")
+    assert outbox.is_repeat("it's still warm out huh")
+    assert not outbox.is_repeat("cold front rolling in tonight, 12 degrees by morning")
 
 
 def test_word_overlap_empty_strings():
-    assert autonomy._word_overlap("", "anything") == 0.0
+    assert outbox._word_overlap("", "anything") == 0.0
 
 
 def test_semester_active_ranges(monkeypatch):

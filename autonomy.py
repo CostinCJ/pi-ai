@@ -3,11 +3,11 @@ import signal
 import time as _time
 import logging
 from logging.handlers import RotatingFileHandler
-import requests
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import timezone
 import db_helpers
+from outbox import send_telegram_message, is_repeat
 import spotify_sync
 from config import (
     TELEGRAM_TOKEN, CHAT_ID, LOG_DIR,
@@ -68,23 +68,6 @@ def proactive_allowed(trigger_type, level=None):
             and db_helpers.proactive_sent_count(hours=24) < BACKOFF_DEAD_MAX_PER_DAY)
 
 
-def _word_overlap(a, b):
-    wa, wb = set(a.lower().split()), set(b.lower().split())
-    if not wa or not wb:
-        return 0.0
-    return len(wa & wb) / min(len(wa), len(wb))
-
-
-def _is_repeat(message):
-    """True if the phrased message is near-identical to a recently sent one.
-    Dedup keys only guard within a trigger+day; this catches 'still warm out
-    huh' being sent verbatim across different days."""
-    for prev in db_helpers.get_recent_proactive_texts(days=PROACTIVE_REPEAT_DAYS):
-        if _word_overlap(message, prev) >= PROACTIVE_REPEAT_OVERLAP:
-            return True
-    return False
-
-
 def _last_sent_label(last_sent):
     if not last_sent:
         return "(none)"
@@ -101,20 +84,6 @@ def _last_sent_label(last_sent):
         return f"{last_sent['text']} ({age})"
     except Exception:
         return last_sent['text']
-
-
-def send_telegram_message(text):
-    """Sends via Telegram. Returns True on 2xx, False otherwise. Never raises."""
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    try:
-        r = requests.post(url, json={"chat_id": CHAT_ID, "text": text}, timeout=10)
-        if 200 <= r.status_code < 300:
-            return True
-        logging.error(f"send_telegram_message non-2xx: {r.status_code} {r.text[:200]}")
-        return False
-    except Exception as e:
-        logging.error(f"send_telegram_message failed: {e}")
-        return False
 
 
 def retry_undelivered():
@@ -179,7 +148,7 @@ def _handle_trigger_send(trigger_type, fired_context, fired_dedup_key, success_c
         db_helpers.mark_proactive_attempted(trigger_type, fired_dedup_key)
         return False
 
-    if _is_repeat(message):
+    if is_repeat(message):
         logging.info(f"tick: trigger={trigger_type} suppressed repeat: {message[:60]}")
         db_helpers.mark_proactive_attempted(trigger_type, fired_dedup_key)
         return False
