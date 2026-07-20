@@ -35,6 +35,7 @@ GROQ_VISION_MODEL  = _opt("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e
 GROQ_WHISPER_MODEL = _opt("GROQ_WHISPER_MODEL", "whisper-large-v3-turbo")
 VOICE_MAX_SECONDS = int(_opt("VOICE_MAX_SECONDS", "60"))
 SEARCH_MAX_RESULTS = int(_opt("SEARCH_MAX_RESULTS", "3"))
+BRAVE_API_KEY = _opt("BRAVE_API_KEY", "")
 
 # --- Telegram ---
 TELEGRAM_TOKEN = _req("TELEGRAM_TOKEN")
