@@ -64,3 +64,101 @@ def test_collect_data_survives_broken_section(fake_db):
          patch.object(briefing.uni_schedule, "semester_active", return_value=False):
         data = briefing.collect_data()
     assert "weather" not in data  # skipped, not raised
+
+
+def _fake_data():
+    return {"weather": "22°C clear", "reminders": ["15:00 print report"]}
+
+
+def test_compose_uses_llm_with_explicit_num_predict(fake_db, fake_ollama):
+    fake_ollama["queue"].append("22 and clear. print the report at 15:00.")
+    text = briefing.compose(_fake_data())
+    assert text == "22 and clear. print the report at 15:00."
+    options = fake_ollama["calls"][0]["options"]
+    assert options.get("num_predict"), "explicit num_predict is mandatory"
+
+
+def test_compose_falls_back_to_raw_lines_when_llm_empty(fake_db, fake_ollama):
+    # queue empty -> fake chat returns "" -> plain data fallback, never nothing
+    text = briefing.compose(_fake_data())
+    assert "22°C clear" in text
+    assert "15:00 print report" in text
+
+
+def test_send_briefing_once_per_day(fake_db, fake_ollama):
+    fake_ollama["queue"].append("morning line")
+    with patch.object(briefing.weather_sync, "get_current_weather",
+                      return_value="22°C clear"), \
+         patch.object(briefing.uni_schedule, "semester_active", return_value=False), \
+         patch.object(outbox, "send_telegram_message", return_value=True) as tg:
+        assert briefing.send_briefing()
+        assert not briefing.send_briefing()  # dedup
+    assert tg.call_count == 1
+
+
+def test_send_briefing_skips_when_no_data(fake_db, fake_ollama):
+    with patch.object(briefing.weather_sync, "get_current_weather",
+                      return_value="Weather data unavailable."), \
+         patch.object(briefing.uni_schedule, "semester_active", return_value=False), \
+         patch.object(outbox, "send_telegram_message") as tg:
+        assert not briefing.send_briefing()
+    tg.assert_not_called()
+
+
+def test_tick_sends_when_active_inside_window(fake_db, fake_ollama, monkeypatch):
+    fake_ollama["queue"].append("morning line")
+    class FakeNow:
+        @staticmethod
+        def now():
+            import datetime as _dt
+            return _dt.datetime(2026, 7, 20, 10, 30)
+    monkeypatch.setattr(briefing, "datetime", FakeNow)
+    with patch.object(briefing, "user_is_active", return_value=True), \
+         patch.object(briefing.weather_sync, "get_current_weather",
+                      return_value="22°C clear"), \
+         patch.object(briefing.uni_schedule, "semester_active", return_value=False), \
+         patch.object(outbox, "send_telegram_message", return_value=True) as tg:
+        briefing.briefing_tick()
+    assert tg.call_count == 1
+
+
+def test_tick_holds_when_inactive_inside_window(fake_db, monkeypatch):
+    class FakeNow:
+        @staticmethod
+        def now():
+            import datetime as _dt
+            return _dt.datetime(2026, 7, 20, 10, 30)
+    monkeypatch.setattr(briefing, "datetime", FakeNow)
+    with patch.object(briefing, "user_is_active", return_value=False), \
+         patch.object(outbox, "send_telegram_message") as tg:
+        briefing.briefing_tick()
+    tg.assert_not_called()
+
+
+def test_tick_fallback_at_window_end(fake_db, fake_ollama, monkeypatch):
+    fake_ollama["queue"].append("morning line")
+    class FakeNow:
+        @staticmethod
+        def now():
+            import datetime as _dt
+            return _dt.datetime(2026, 7, 20, 13, 5)
+    monkeypatch.setattr(briefing, "datetime", FakeNow)
+    with patch.object(briefing, "user_is_active", return_value=False), \
+         patch.object(briefing.weather_sync, "get_current_weather",
+                      return_value="22°C clear"), \
+         patch.object(briefing.uni_schedule, "semester_active", return_value=False), \
+         patch.object(outbox, "send_telegram_message", return_value=True) as tg:
+        briefing.briefing_tick()
+    assert tg.call_count == 1
+
+
+def test_tick_never_fires_outside_hours(fake_db, monkeypatch):
+    class FakeNow:
+        @staticmethod
+        def now():
+            import datetime as _dt
+            return _dt.datetime(2026, 7, 20, 20, 0)
+    monkeypatch.setattr(briefing, "datetime", FakeNow)
+    with patch.object(outbox, "send_telegram_message") as tg:
+        briefing.briefing_tick()
+    tg.assert_not_called()

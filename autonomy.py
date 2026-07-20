@@ -9,6 +9,7 @@ from datetime import timezone
 import db_helpers
 from outbox import send_telegram_message, is_repeat
 import spotify_sync
+import briefing
 from config import (
     LOG_DIR,
     APP_LOG_MAX_BYTES, APP_LOG_BACKUPS,
@@ -285,6 +286,7 @@ if __name__ == '__main__':
     _scheduler.add_job(deliver_reminders, 'interval', minutes=1)
     _scheduler.add_job(spotify_poll, 'interval', minutes=SPOTIFY_POLL_INTERVAL_MIN)
     _scheduler.add_job(spotify_prune, 'cron', hour=4, minute=37)
+    _scheduler.add_job(briefing.briefing_tick, 'interval', minutes=10)
     _scheduler.start()
     try:
         while True:
