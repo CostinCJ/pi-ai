@@ -84,6 +84,15 @@ def post_game_trigger():
     if not ids:
         return False, ""
     match_id = ids[0]
+    # riot_match_log is the persistent dedup: the attempted-today state resets
+    # at midnight, and the latest match stays "latest" until a new one is
+    # played — without this it would re-announce daily.
+    with db_helpers.get_conn() as conn:
+        seen = conn.execute(
+            "SELECT 1 FROM riot_match_log WHERE match_id=?", (match_id,)
+        ).fetchone()
+    if seen:
+        return False, ""
     dedup_key = f"post_game_{match_id}"
     if db_helpers.was_proactive_attempted_today("post_game", dedup_key):
         return False, ""

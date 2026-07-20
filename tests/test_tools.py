@@ -86,3 +86,24 @@ def test_set_reminder_invalid_datetime(fake_db):
     import tools
     result = tools.set_reminder("test", "not-a-datetime")
     assert "failed" in result.lower()
+
+
+def test_set_reminder_converts_aware_datetime_to_local(fake_db):
+    import tools, db_helpers
+    from datetime import datetime, timedelta, timezone
+    utc_dt = (datetime.now(timezone.utc) + timedelta(hours=2)).replace(microsecond=0)
+    tools.set_reminder("tz test", utc_dt.isoformat())
+    with db_helpers.get_conn() as conn:
+        row = conn.execute(
+            "SELECT fire_at FROM reminders WHERE text='tz test'"
+        ).fetchone()
+    expected = utc_dt.astimezone().replace(tzinfo=None)
+    assert row[0] == expected.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def test_set_reminder_confirmation_includes_date_when_not_today(fake_db):
+    import tools
+    from datetime import datetime, timedelta
+    tomorrow = (datetime.now() + timedelta(days=1)).replace(microsecond=0)
+    result = tools.set_reminder("call mom", tomorrow.isoformat())
+    assert tomorrow.strftime("%d") in result, f"no date hint in: {result}"

@@ -72,14 +72,20 @@ def get_recent_tracks_raw():
         tracks = []
         for item in results['items']:
             played_at_str = item.get('played_at', '')
+            played_local = ''
             if played_at_str:
                 played_at = datetime.fromisoformat(played_at_str.replace('Z', '+00:00'))
                 if datetime.now(timezone.utc) - played_at > timedelta(hours=RECENT_ACTIVE_HOURS):
                     continue
+                # Spotify reports UTC; the DB convention (spotify_played_within,
+                # get_recent_spotify ages) is naive localtime.
+                played_local = (
+                    played_at.astimezone().replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
+                )
             tracks.append({
                 'artist': item['track']['artists'][0]['name'],
                 'title': item['track']['name'],
-                'played_at': played_at_str.replace('Z', ' ').replace('T', ' ')[:19]
+                'played_at': played_local,
             })
         return tracks
     except Exception:

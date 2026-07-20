@@ -33,11 +33,22 @@ def _retry(fn, attempts=3, base_delay=10, label="op"):
     return None
 
 
+def _wal_checkpoint():
+    """Keep the WAL from growing unbounded (it was 5x the DB size at one
+    point). Must run on every exit path — skip/monologue days are the common
+    case."""
+    try:
+        with db_helpers.get_conn() as conn:
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    except Exception as e:
+        logging.warning(f"WAL checkpoint failed: {e}")
+
+
 def _validate_realtime_facts():
     with db_helpers.get_conn() as conn:
         candidates = conn.execute(
             "SELECT fact_key, fact_value FROM user_facts "
-            "WHERE source='realtime' AND confidence=0.6 "
+            "WHERE source IN ('realtime', 'llm_realtime') "
             "AND last_updated >= datetime('now', '-1 day')"
         ).fetchall()
     if not candidates:
@@ -68,7 +79,11 @@ Reply as JSON: {{"keep": ["fact1", "fact2"], "reject": ["fact3"]}}"""}
                     (key,)
                 )
             else:
-                conn.execute("DELETE FROM user_facts WHERE fact_key=? AND confidence=0.6", (key,))
+                conn.execute(
+                    "DELETE FROM user_facts WHERE fact_key=? "
+                    "AND source IN ('realtime', 'llm_realtime')",
+                    (key,)
+                )
 
 
 def extract_facts_and_summarize():
@@ -80,6 +95,7 @@ def extract_facts_and_summarize():
 
     if len(rows) < 4:
         logging.info("Not enough messages to consolidate. Skipping.")
+        _wal_checkpoint()
         return
 
     # Days where only Lache spoke are a monologue, not a conversation.
@@ -100,6 +116,7 @@ def extract_facts_and_summarize():
         logging.info(f"No user messages today — AI monologue compacted ({len(drop_ids)} rows), no summarization.")
         db_helpers.decay_realtime_facts()
         db_helpers.prune_long_lived_tables()
+        _wal_checkpoint()
         return
 
     log_text = "".join(f"{r[1].upper()}: {r[2]}\n" for r in rows)
@@ -210,13 +227,7 @@ Output strictly as JSON:
     _validate_realtime_facts()
     db_helpers.decay_realtime_facts()
     db_helpers.prune_long_lived_tables()
-
-    # Keep the WAL from growing unbounded (it was 5x the DB size at one point).
-    try:
-        with db_helpers.get_conn() as conn:
-            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-    except Exception as e:
-        logging.warning(f"WAL checkpoint failed: {e}")
+    _wal_checkpoint()
 
 
 if __name__ == '__main__':

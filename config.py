@@ -109,6 +109,9 @@ ENGAGEMENT_WINDOW = int(_opt("ENGAGEMENT_WINDOW", "10"))
 ENGAGEMENT_DEAD_WINDOW = int(_opt("ENGAGEMENT_DEAD_WINDOW", "25"))
 BACKOFF_IGNORED_MAX_PER_DAY = int(_opt("BACKOFF_IGNORED_MAX_PER_DAY", "2"))
 BACKOFF_DEAD_MAX_PER_DAY = int(_opt("BACKOFF_DEAD_MAX_PER_DAY", "1"))
+# Any real conversation within this many days counts as engaged, regardless
+# of whether a reply landed inside the 1h post-proactive attribution window.
+ENGAGEMENT_RESET_DAYS = int(_opt("ENGAGEMENT_RESET_DAYS", "3"))
 
 # --- Proactive repeat suppression ---
 PROACTIVE_REPEAT_OVERLAP = float(_opt("PROACTIVE_REPEAT_OVERLAP", "0.6"))

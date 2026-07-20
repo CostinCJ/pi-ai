@@ -101,3 +101,29 @@ def test_no_class_trigger_during_break(monkeypatch):
     assert uni_schedule.get_next_class() is None
     assert uni_schedule.has_class_soon() is None
     assert "break" in uni_schedule.get_todays_classes()
+
+
+def test_engagement_resets_when_user_chatted_recently(fake_db):
+    """A user actively talking to Lache is engaged, full stop — even if no
+    reply landed within an hour of a proactive send."""
+    _seed_proactive(25)
+    db_helpers.log_message("user", "salut")
+    assert autonomy.engagement_level() == "engaged"
+
+
+def test_engagement_resets_via_recent_daily_signal(fake_db):
+    """Consolidation deletes raw messages at 4am; daily_signal rows are the
+    durable proof a real conversation happened."""
+    _seed_proactive(25)
+    db_helpers.insert_daily_signal(date.today().isoformat(), "neutral", 3, "t", "s", 12)
+    assert autonomy.engagement_level() == "engaged"
+
+
+def test_engagement_stays_dead_when_last_chat_is_old(fake_db):
+    _seed_proactive(25)
+    with db_helpers.get_conn() as conn:
+        conn.execute(
+            "INSERT INTO daily_signal (date, mood, energy, main_topics, summary, message_count) "
+            "VALUES (date('now', '-10 days'), 'neutral', 3, 't', 's', 12)"
+        )
+    assert autonomy.engagement_level() == "dead"

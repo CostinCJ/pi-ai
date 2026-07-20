@@ -251,6 +251,27 @@ def mark_user_response_received():
         pass
 
 
+def user_engaged_recently(days=3):
+    """True if the user actually talked to Lache in the last `days` days.
+    Checks conversations (today's raw messages) AND daily_signal (consolidation
+    deletes raw rows at 4am; a daily_signal row is only written for days with
+    real user messages)."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM conversations WHERE sender='user' "
+            "AND timestamp > datetime('now', ?) LIMIT 1",
+            (f'-{int(days)} days',)
+        ).fetchone()
+        if row:
+            return True
+        row = conn.execute(
+            "SELECT 1 FROM daily_signal WHERE message_count > 0 "
+            "AND date >= date('now', ?) LIMIT 1",
+            (f'-{int(days)} days',)
+        ).fetchone()
+    return row is not None
+
+
 def proactive_engagement(last_n):
     """(responded, total) over the last `last_n` delivered proactive messages.
     Briefings are excluded: they're delivered=1, user_responded=0 by design
@@ -407,28 +428,30 @@ def get_latest_session_snapshot_meta():
 # --- Maintenance helpers ---
 
 def decay_realtime_facts():
-    """Linearly decay confidence on realtime facts older than FACT_DECAY_DAYS,
-    clamped to FACT_DECAY_FLOOR. Promoted (source != 'realtime') facts are
-    untouched. Run from cron / consolidation."""
+    """Halve confidence on realtime facts once per elapsed FACT_DECAY_DAYS
+    period, clamped to FACT_DECAY_FLOOR. Promoted (consolidation/manual) facts
+    are untouched. last_decayed anchors the decay clock so daily runs don't
+    compound — last_updated keeps meaning 'when learned'. Run from cron /
+    consolidation."""
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT fact_key, confidence, last_updated FROM user_facts "
-            "WHERE source='realtime'"
+            "SELECT fact_key, confidence, COALESCE(last_decayed, last_updated) "
+            "FROM user_facts WHERE source IN ('realtime', 'llm_realtime')"
         ).fetchall()
-        for key, conf, last_updated in rows:
+        for key, conf, anchor in rows:
             try:
-                ts = datetime.strptime(last_updated[:19], "%Y-%m-%d %H:%M:%S")
+                ts = datetime.strptime(anchor[:19], "%Y-%m-%d %H:%M:%S")
             except Exception:
                 continue
             age_days = (datetime.now() - ts).days
             if age_days < FACT_DECAY_DAYS:
                 continue
-            # Linear decay: every FACT_DECAY_DAYS halves the distance to floor.
             steps = age_days // FACT_DECAY_DAYS
             new_conf = max(FACT_DECAY_FLOOR, conf * (0.5 ** steps))
             if abs(new_conf - conf) > 0.01:
                 conn.execute(
-                    "UPDATE user_facts SET confidence=? WHERE fact_key=?",
+                    "UPDATE user_facts SET confidence=?, last_decayed=datetime('now') "
+                    "WHERE fact_key=?",
                     (new_conf, key)
                 )
 

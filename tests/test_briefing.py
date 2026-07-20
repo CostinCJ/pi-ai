@@ -181,3 +181,15 @@ def test_tick_never_fires_outside_hours(fake_db, monkeypatch):
     with patch.object(outbox, "send_telegram_message") as tg:
         briefing.briefing_tick()
     tg.assert_not_called()
+
+
+def test_compose_payload_formats_lists_as_lines(fake_db, fake_ollama):
+    fake_ollama["queue"].append("all good")
+    briefing.compose({
+        "reminders": ["09:00 dentist", "18:00 gym"],
+        "updates": ["new ptv album out"],
+    })
+    payload = fake_ollama["calls"][0]["messages"][1]["content"]
+    assert "09:00 dentist" in payload
+    assert "new ptv album out" in payload
+    assert "[" not in payload, "python list repr leaked into the LLM prompt"

@@ -67,9 +67,17 @@ def extract_and_store_facts():
                 confidence = float(fact.get("confidence", 0.75))
                 if len(key) < 2 or not value:
                     continue
+                # Refresh realtime facts in place (values change: relationship,
+                # music taste...) but never clobber promoted/manual facts with
+                # noisy realtime extractions.
                 conn.execute(
-                    "INSERT OR IGNORE INTO user_facts "
-                    "(fact_key, fact_value, source, confidence) VALUES (?,?,?,?)",
+                    "INSERT INTO user_facts "
+                    "(fact_key, fact_value, source, confidence) VALUES (?,?,?,?) "
+                    "ON CONFLICT(fact_key) DO UPDATE SET "
+                    "fact_value=excluded.fact_value, "
+                    "confidence=excluded.confidence, "
+                    "last_updated=CURRENT_TIMESTAMP "
+                    "WHERE user_facts.source IN ('realtime', 'llm_realtime')",
                     (key, value, "llm_realtime", confidence)
                 )
                 stored += 1

@@ -3,6 +3,7 @@ import time
 import json
 import re
 import os
+import fcntl
 import inspect
 import logging
 import groq as _groq
@@ -30,21 +31,31 @@ BANNED_PHRASES = [
 LOG_PATH = os.path.join(str(LOG_DIR), 'llm.log')
 
 
-def _rotate_log():
-    if os.path.exists(LOG_PATH) and os.path.getsize(LOG_PATH) > LLM_LOG_MAX_BYTES:
-        with open(LOG_PATH, 'w'):
-            pass
+def _append(line):
+    """Append a line to LOG_PATH, rotating first if oversized. bot.py and
+    autonomy.py are separate processes writing the same file — flock
+    serializes the check/rotate/write so one process's rotation can't
+    truncate a line another just wrote."""
+    with open(LOG_PATH, 'a') as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        try:
+            size = f.seek(0, os.SEEK_END)
+            if size > LLM_LOG_MAX_BYTES:
+                f.seek(0)
+                f.truncate()
+                f.seek(0, os.SEEK_END)
+            f.write(line + "\n")
+        finally:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
 
 def _log(caller, latency_ms, success, extra=""):
-    _rotate_log()
     ts = time.strftime('%Y-%m-%d %H:%M:%S')
     status = 'ok' if success else 'fail'
     line = f"{ts} caller={caller} latency_ms={latency_ms:.0f} status={status}"
     if extra:
         line += f" {extra}"
-    with open(LOG_PATH, 'a') as f:
-        f.write(line + "\n")
+    _append(line)
 
 
 def _clean(text):
@@ -147,8 +158,7 @@ def chat_json(messages, options=None, schema_keys=None, timeout=60):
         return data
     except Exception as e:
         _log(caller, 0, False, f"chat_json_err={type(e).__name__}")
-        with open(LOG_PATH, 'a') as f:
-            f.write(f"  chat_json error: {type(e).__name__}: {e}\n")
+        _append(f"  chat_json error: {type(e).__name__}: {e}")
         return None
 
 

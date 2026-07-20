@@ -70,3 +70,49 @@ def test_external_ok_treats_none_as_failure():
     assert bot._external_ok(None) is False
     assert bot._external_ok("Weather data unavailable.") is False
     assert bot._external_ok("The current weather in Cluj-Napoca is 12.0C") is True
+
+
+def _media_update_ctx():
+    update = MagicMock()
+    update.message.chat_id = 123
+    update.message.reply_text = AsyncMock()
+    ctx = MagicMock()
+    ctx.bot.send_chat_action = AsyncMock()
+    mock_file = MagicMock()
+    mock_file.download_as_bytearray = AsyncMock(return_value=bytearray(b"bytes"))
+    ctx.bot.get_file = AsyncMock(return_value=mock_file)
+    return update, ctx
+
+
+@pytest.mark.asyncio
+async def test_voice_reply_counts_as_user_response(fake_db):
+    import db_helpers
+    row_id = db_helpers.log_proactive("post_game", "k", "msg", delivered=1)
+    update, ctx = _media_update_ctx()
+    update.message.voice.duration = 10
+    with patch("bot.llm.transcribe_voice", return_value="salut"), \
+         patch("bot.brain.generate_agentic_reply", return_value="hey"), \
+         patch("bot.llm_facts.extract_and_store_facts"):
+        await bot.handle_voice(update, ctx)
+    with db_helpers.get_conn() as conn:
+        responded = conn.execute(
+            "SELECT user_responded FROM proactive_log WHERE id=?", (row_id,)
+        ).fetchone()[0]
+    assert responded == 1
+
+
+@pytest.mark.asyncio
+async def test_photo_reply_counts_as_user_response(fake_db):
+    import db_helpers
+    row_id = db_helpers.log_proactive("post_game", "k", "msg", delivered=1)
+    update, ctx = _media_update_ctx()
+    update.message.photo = [MagicMock(file_id="f1")]
+    update.message.caption = ""
+    with patch("bot.brain.generate_agentic_reply", return_value="nice pic"), \
+         patch("bot.llm_facts.extract_and_store_facts"):
+        await bot.handle_photo(update, ctx)
+    with db_helpers.get_conn() as conn:
+        responded = conn.execute(
+            "SELECT user_responded FROM proactive_log WHERE id=?", (row_id,)
+        ).fetchone()[0]
+    assert responded == 1

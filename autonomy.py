@@ -17,7 +17,7 @@ from config import (
     QUIET_HOURS_START, QUIET_HOURS_END,
     RECENT_ACTIVE_COOLDOWN_MIN,
     SPOTIFY_POLL_INTERVAL_MIN, SPOTIFY_TRACKS_KEEP_DAYS,
-    ENGAGEMENT_WINDOW, ENGAGEMENT_DEAD_WINDOW,
+    ENGAGEMENT_WINDOW, ENGAGEMENT_DEAD_WINDOW, ENGAGEMENT_RESET_DAYS,
     BACKOFF_IGNORED_MAX_PER_DAY, BACKOFF_DEAD_MAX_PER_DAY,
     PROACTIVE_REPEAT_OVERLAP, PROACTIVE_REPEAT_DAYS,
 )
@@ -45,7 +45,12 @@ CORE_TRIGGERS = {'home_arrival', 'post_game'}
 
 def engagement_level():
     """'engaged' | 'ignored' | 'dead', from replies to recent proactive sends.
-    A single user reply anywhere in the recent window restores 'engaged'."""
+    A single user reply anywhere in the recent window restores 'engaged'.
+    A user who chatted at all in the last ENGAGEMENT_RESET_DAYS days is
+    engaged regardless — replies rarely land within an hour of a proactive
+    send, which is all mark_user_response_received can attribute."""
+    if db_helpers.user_engaged_recently(days=ENGAGEMENT_RESET_DAYS):
+        return 'engaged'
     responded, total = db_helpers.proactive_engagement(ENGAGEMENT_DEAD_WINDOW)
     if total < ENGAGEMENT_WINDOW or responded > 0:
         recent_responded, recent_total = db_helpers.proactive_engagement(ENGAGEMENT_WINDOW)

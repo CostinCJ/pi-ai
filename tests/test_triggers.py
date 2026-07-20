@@ -28,3 +28,19 @@ def test_all_triggers_is_exactly_class_soon_and_post_game():
                  "late_night_trigger", "session_trigger",
                  "weather_flip_trigger", "open_thread_trigger"):
         assert not hasattr(triggers, gone)
+
+
+def test_post_game_skips_match_already_in_log(fake_db, monkeypatch):
+    """The daily proactive_state dedup resets at midnight; riot_match_log is
+    the persistent record. A match announced once must never re-fire the next
+    day just because it's still the most recent one."""
+    monkeypatch.setattr(triggers, "RIOT_PUUID", "puuid1", raising=False)
+    with db_helpers.get_conn() as conn:
+        conn.execute(
+            "INSERT INTO riot_match_log (match_id, played_at) VALUES ('EUN1_1', datetime('now'))"
+        )
+    with patch("triggers.riot_client.get_recent_match_ids", return_value=["EUN1_1"]), \
+         patch("triggers.riot_client.get_match") as get_match:
+        result = triggers.post_game_trigger()
+    assert result[0] is False
+    get_match.assert_not_called()

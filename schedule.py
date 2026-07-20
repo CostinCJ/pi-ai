@@ -1,5 +1,5 @@
 from datetime import datetime, date, timedelta
-from config import SAPT1_ANCHOR, SEMESTER_RANGES
+from config import SAPT1_ANCHOR, SEMESTER_RANGES, QUIET_HOURS_END
 
 
 def _anchor_date():
@@ -28,13 +28,15 @@ def semester_active(today=None):
     return any(start <= today <= end for start, end in _semester_ranges())
 
 
-def is_sapt1():
-    """Anchor-based parity. Each ISO week increments parity by 1."""
-    today = date.today()
+def is_sapt1(today=None):
+    """Anchor-based parity: weeks elapsed between the Mondays of the two
+    weeks. (ISO week arithmetic with `year_diff * 52` breaks on 53-week ISO
+    years like 2026 and flips the parity for every later year.)"""
+    today = today or date.today()
     anchor = _anchor_date()
-    today_iso = today.isocalendar()
-    anchor_iso = anchor.isocalendar()
-    delta_weeks = (today_iso[0] - anchor_iso[0]) * 52 + (today_iso[1] - anchor_iso[1])
+    monday = today - timedelta(days=today.weekday())
+    anchor_monday = anchor - timedelta(days=anchor.weekday())
+    delta_weeks = (monday - anchor_monday).days // 7
     return delta_weeks % 2 == 0
 
 
@@ -88,14 +90,32 @@ def get_todays_classes():
     return "Classes today: " + ", ".join(parts)
 
 
-def get_next_class():
-    """Returns the next upcoming class today, or None if none left."""
-    if not semester_active():
+def get_current_class(now=None):
+    """Returns the slot active right now, or None."""
+    now = now or datetime.now()
+    if not semester_active(now.date()):
         return None
-    now = datetime.now()
     day = now.weekday()
     slots = TIMETABLE.get(day, [])
-    sapt1 = is_sapt1()
+    sapt1 = is_sapt1(now.date())
+    for s in slots:
+        if not _slot_active(s, sapt1):
+            continue
+        start_dt = now.replace(hour=s["start"], minute=0, second=0, microsecond=0)
+        end_dt = now.replace(hour=s["end"], minute=0, second=0, microsecond=0)
+        if start_dt <= now < end_dt:
+            return s
+    return None
+
+
+def get_next_class(now=None):
+    """Returns the next upcoming class today, or None if none left."""
+    now = now or datetime.now()
+    if not semester_active(now.date()):
+        return None
+    day = now.weekday()
+    slots = TIMETABLE.get(day, [])
+    sapt1 = is_sapt1(now.date())
     for s in sorted(slots, key=lambda x: x["start"]):
         slot_dt = now.replace(hour=s["start"], minute=0, second=0, microsecond=0)
         if slot_dt <= now:
@@ -105,12 +125,24 @@ def get_next_class():
     return None
 
 
-def has_class_soon(within_hours=2):
-    """Returns a string like 'TRSI curs in ~45min' or None."""
-    next_class = get_next_class()
+def has_class_soon(within_hours=2, now=None):
+    """Returns a string like 'TRSI curs in ~45min' or None.
+
+    Also flags a class already in progress if it started before
+    QUIET_HOURS_END: quiet hours mean the normal "in ~Xmin" heads-up never
+    gets a chance to fire before an early class (e.g. an 8:00 lab) starts, so
+    the first tick after quiet hours must still be able to say something.
+    """
+    now = now or datetime.now()
+    current = get_current_class(now=now)
+    if current and current["start"] < QUIET_HOURS_END:
+        return (
+            f"{current['subject']} started at {current['start']}:00, "
+            f"ends {current['end']}:00 ({current['room']})"
+        )
+    next_class = get_next_class(now=now)
     if not next_class:
         return None
-    now = datetime.now()
     slot_dt = now.replace(hour=next_class["start"], minute=0, second=0, microsecond=0)
     delta = slot_dt - now
     if delta.total_seconds() <= 0:

@@ -26,11 +26,17 @@ def web_search(query: str) -> str:
 
 
 def set_reminder(text: str, fire_at: str) -> str:
-    """Store a reminder in the DB. fire_at must be an ISO/SQLite datetime string."""
+    """Store a reminder in the DB. fire_at must be an ISO/SQLite datetime
+    string; aware datetimes (e.g. a trailing Z from the LLM) are converted to
+    naive localtime, the reminders-table convention."""
     try:
         from datetime import datetime
         dt = datetime.fromisoformat(fire_at)
+        if dt.tzinfo is not None:
+            dt = dt.astimezone().replace(tzinfo=None)
         _db.add_reminder(text, dt.strftime("%Y-%m-%d %H:%M:%S"))
-        return f"reminder set for {dt.strftime('%H:%M')}"
+        when = dt.strftime("%H:%M") if dt.date() == datetime.now().date() \
+            else dt.strftime("%d %b %H:%M")
+        return f"reminder set for {when}"
     except Exception as e:
         return f"reminder failed: {type(e).__name__}: {e}"

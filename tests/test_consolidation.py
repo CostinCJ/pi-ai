@@ -39,3 +39,19 @@ def test_extract_facts_includes_patterns(fake_db, monkeypatch):
 
     patterns = db_helpers.get_recent_patterns(limit=20)
     assert "user codes late at night" in patterns
+
+
+def test_wal_checkpoint_runs_on_skip_paths(fake_db, monkeypatch):
+    """Most days take the <4-rows or monologue early-return path; the WAL
+    checkpoint must run there too, not only after a full consolidation."""
+    import db_helpers
+    calls = []
+    monkeypatch.setattr(
+        consolidation, "_wal_checkpoint", lambda: calls.append(1), raising=False
+    )
+    consolidation.extract_facts_and_summarize()  # no messages -> skip path
+    assert len(calls) == 1
+    for i in range(5):
+        db_helpers.log_message("ai", f"monologue {i}")
+    consolidation.extract_facts_and_summarize()  # AI-only day -> monologue path
+    assert len(calls) == 2

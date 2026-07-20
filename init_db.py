@@ -192,6 +192,7 @@ def setup_database():
         "ALTER TABLE user_facts ADD COLUMN source TEXT DEFAULT 'unknown'",
         "ALTER TABLE user_facts ADD COLUMN confidence REAL DEFAULT 1.0",
         "ALTER TABLE user_facts ADD COLUMN times_referenced INTEGER DEFAULT 0",
+        "ALTER TABLE user_facts ADD COLUMN last_decayed DATETIME",
     ]:
         try:
             cursor.execute(sql)

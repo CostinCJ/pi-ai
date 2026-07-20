@@ -150,6 +150,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     db_helpers.log_message('user', f"[photo]{': ' + caption if caption else ''}")
+    db_helpers.mark_user_response_received()
 
     try:
         ai_reply = brain.generate_agentic_reply(caption, image_data=image_data)
@@ -193,6 +194,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     db_helpers.log_message("user", f"[voice] {text}")
+    db_helpers.mark_user_response_received()
     reply = brain.generate_agentic_reply(text)
     if not reply or not reply.strip():
         reply = random.choice(IN_CHARACTER_FALLBACKS)
@@ -202,6 +204,8 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(reply)
     except Exception as e:
         _log.error(f"voice reply failed: {e}", exc_info=True)
+
+    threading.Thread(target=llm_facts.extract_and_store_facts, daemon=True).start()
 
 
 async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):

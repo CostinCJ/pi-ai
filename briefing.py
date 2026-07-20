@@ -98,9 +98,14 @@ def _fallback_text(data):
 def compose(data):
     if not data:
         return None
-    payload = "\n".join(
-        f"{key}: {value}" for key, value in data.items()
-    )
+    # One "key: value" line per item — never a raw Python list repr.
+    payload_lines = []
+    for key, value in data.items():
+        if isinstance(value, list):
+            payload_lines.extend(f"{key}: {v}" for v in value)
+        else:
+            payload_lines.append(f"{key}: {value}")
+    payload = "\n".join(payload_lines)
     messages = [
         {"role": "system", "content": f"{PERSONA}\n\n{_COMPOSE_RULES}"},
         {"role": "user", "content": f"DATA:\n{payload}"},
