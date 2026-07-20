@@ -118,6 +118,10 @@ PROACTIVE_REPEAT_DAYS = int(_opt("PROACTIVE_REPEAT_DAYS", "14"))
 THREAD_MAX_AGE_DAYS = int(_opt("THREAD_MAX_AGE_DAYS", "30"))
 
 # --- Daily briefing ---
+# BRIEFING_WINDOW_START/END and QUIET_HOURS_START/END are independently
+# tunable — this window must stay outside quiet hours (defaults: quiet ends
+# at QUIET_HOURS_END=9, window starts at BRIEFING_WINDOW_START=9) or the
+# briefing tick will never get a chance to fire.
 BRIEFING_WINDOW_START = int(_opt("BRIEFING_WINDOW_START", "9"))
 BRIEFING_WINDOW_END = int(_opt("BRIEFING_WINDOW_END", "13"))  # send regardless at this hour
 BRIEFING_SPOTIFY_ACTIVE_MIN = int(_opt("BRIEFING_SPOTIFY_ACTIVE_MIN", "20"))

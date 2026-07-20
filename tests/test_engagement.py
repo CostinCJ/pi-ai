@@ -60,6 +60,22 @@ def test_proactive_allowed_dead_core_only(fake_db):
     assert not autonomy.proactive_allowed("late_night")
 
 
+def _seed_briefings(n):
+    for i in range(n):
+        db_helpers.log_proactive("briefing", f"briefing_2026-07-{i:02d}", f"briefing text {i}", delivered=1)
+
+
+def test_engagement_ignores_briefing_rows(fake_db):
+    # Briefings are delivered=1, user_responded=0 by design (they ask no
+    # questions) — they must not drive engagement_level() down or consume
+    # the backoff send budget.
+    _seed_briefings(25)
+    assert autonomy.engagement_level() == "engaged"
+    responded, total = db_helpers.proactive_engagement(10)
+    assert total == 0
+    assert db_helpers.proactive_sent_count(hours=24) == 0
+
+
 def test_repeat_suppression_catches_near_identical(fake_db):
     db_helpers.log_proactive("weather_flip", "k1", "still warm out huh", delivered=1)
     assert outbox.is_repeat("still warm out huh")

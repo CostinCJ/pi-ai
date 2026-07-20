@@ -252,32 +252,43 @@ def mark_user_response_received():
 
 
 def proactive_engagement(last_n):
-    """(responded, total) over the last `last_n` delivered proactive messages."""
+    """(responded, total) over the last `last_n` delivered proactive messages.
+    Briefings are excluded: they're delivered=1, user_responded=0 by design
+    (they ask no questions), so counting them would drag engagement_level()
+    toward 'ignored'/'dead' regardless of actual conversational engagement."""
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT user_responded FROM proactive_log "
-            "WHERE delivered=1 ORDER BY id DESC LIMIT ?",
+            "WHERE delivered=1 AND trigger_type != 'briefing' "
+            "ORDER BY id DESC LIMIT ?",
             (int(last_n),)
         ).fetchall()
     return sum(r[0] for r in rows), len(rows)
 
 
 def proactive_sent_count(hours=24):
-    """Delivered proactive messages in the last `hours` hours."""
+    """Delivered proactive messages in the last `hours` hours, excluding
+    briefings (see proactive_engagement) since they'd otherwise eat into the
+    engagement-backoff daily send budget."""
     with get_conn() as conn:
         return conn.execute(
             "SELECT COUNT(*) FROM proactive_log WHERE delivered=1 "
+            "AND trigger_type != 'briefing' "
             "AND timestamp > datetime('now', ?)",
             (f'-{int(hours)} hours',)
         ).fetchone()[0]
 
 
 def get_recent_proactive_texts(days=14, limit=30):
-    """Texts of recently sent proactive messages, for repeat suppression."""
+    """Texts of recently sent proactive messages, for repeat suppression.
+    Briefings are excluded — they're legitimately similar day to day and a
+    short future urgent message overlapping a multi-line briefing could be
+    falsely suppressed."""
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT message_sent FROM proactive_log "
-            "WHERE delivered=1 AND timestamp > datetime('now', ?) "
+            "WHERE delivered=1 AND trigger_type != 'briefing' "
+            "AND timestamp > datetime('now', ?) "
             "ORDER BY id DESC LIMIT ?",
             (f'-{int(days)} days', int(limit))
         ).fetchall()

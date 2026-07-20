@@ -12,7 +12,6 @@ import outbox
 import schedule as uni_schedule
 import weather_sync
 import llm
-from llm import chat
 from config import (
     BRIEFING_WINDOW_START, BRIEFING_WINDOW_END, BRIEFING_SPOTIFY_ACTIVE_MIN,
 )
@@ -135,6 +134,11 @@ def send_briefing(force=False):
     if sent:
         db_helpers.log_message("ai", text)
         db_helpers.log_proactive("briefing", _dedup_key(), text, delivered=1)
+    else:
+        # Drained outbox items are already consumed=1 and the composed text
+        # would otherwise be lost; log it undelivered so retry_undelivered()
+        # redelivers it.
+        db_helpers.log_proactive("briefing", _dedup_key(), text, delivered=0)
     return sent
 
 

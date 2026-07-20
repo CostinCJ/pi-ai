@@ -39,7 +39,7 @@ _PHRASING_OPTIONS = {"temperature": 0.4, "num_predict": 40}
 # Triggers still allowed when the user has stopped responding. Everything else
 # (free_reasoning, weather_flip, session, pattern_surface) is smalltalk-grade
 # and goes quiet until the user replies to something again.
-HIGH_VALUE_TRIGGERS = {'class_soon', 'home_arrival', 'post_game', 'late_night'}
+HIGH_VALUE_TRIGGERS = {'class_soon', 'home_arrival', 'post_game'}
 CORE_TRIGGERS = {'home_arrival', 'post_game'}
 
 

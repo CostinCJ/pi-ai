@@ -105,6 +105,25 @@ def test_send_briefing_skips_when_no_data(fake_db, fake_ollama):
     tg.assert_not_called()
 
 
+def test_send_briefing_logs_undelivered_on_send_failure(fake_db, fake_ollama):
+    # A failed outbox.send() must not lose the composed text — it should be
+    # logged with delivered=0 so retry_undelivered() picks it up later.
+    fake_ollama["queue"].append("morning line")
+    with patch.object(briefing.weather_sync, "get_current_weather",
+                      return_value="22°C clear"), \
+         patch.object(briefing.uni_schedule, "semester_active", return_value=False), \
+         patch.object(outbox, "send_telegram_message", return_value=False):
+        assert not briefing.send_briefing()
+    with db_helpers.get_conn() as conn:
+        rows = conn.execute(
+            "SELECT trigger_type, delivered, message_sent FROM proactive_log"
+        ).fetchall()
+    assert rows == [("briefing", 0, "morning line")]
+    # retry_undelivered() must actually pick this row up.
+    undelivered = db_helpers.get_undelivered_proactive()
+    assert any(r["message_sent"] == "morning line" for r in undelivered)
+
+
 def test_tick_sends_when_active_inside_window(fake_db, fake_ollama, monkeypatch):
     fake_ollama["queue"].append("morning line")
     class FakeNow:
