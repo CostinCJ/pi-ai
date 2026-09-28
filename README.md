@@ -2,7 +2,7 @@
 
 A self-hosted, proactive AI companion that runs on a Raspberry Pi 5 and talks to you over Telegram. Lache holds a persistent memory, learns facts over time, is aware of context (music, weather, presence, schedule), and reaches out on its own instead of only answering when spoken to.
 
-Built in Python with a test-driven workflow: 40+ test modules, a CI pipeline, and design specs for each major feature.
+Built in Python with a test-driven workflow: 30 test modules, a CI pipeline, and design specs for each major feature.
 
 ## What it does
 
