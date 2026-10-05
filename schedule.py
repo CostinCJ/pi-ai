@@ -41,26 +41,24 @@ def is_sapt1(today=None):
 
 
 TIMETABLE = {
-    0: [  # Luni
-        {"start": 14, "end": 16, "subject": "OS lab", "room": "L001", "every": True},
+    # Year 1 Sem 1, Software Engineering (English), group 248/1
+    0: [  # Monday
+        {"start": 8,  "end": 10, "subject": "Ethics & Research Methodology lecture", "room": "C335", "every": True},
+        {"start": 16, "end": 18, "subject": "Agile lecture", "room": "C335", "every": True},
     ],
-    1: [  # Marți
-        {"start": 14, "end": 16, "subject": "OS seminar", "room": "L001", "every": False, "week": 2},
+    1: [  # Tuesday
+        {"start": 16, "end": 18, "subject": "Requirements Engineering lecture", "room": "DC401", "every": True},
+        {"start": 18, "end": 20, "subject": "Agile seminar", "room": "DC401", "every": False, "week": 1},
+        {"start": 18, "end": 20, "subject": "Requirements Engineering seminar", "room": "DC402", "every": False, "week": 2},
     ],
-    2: [  # Miercuri
-        {"start": 12, "end": 14, "subject": "VVSS seminar", "room": "C510", "every": False, "week": 1},
-        {"start": 14, "end": 16, "subject": "Calcul numeric lab", "room": "L439", "every": True},
-        {"start": 16, "end": 18, "subject": "VVSS lab", "room": "DC405", "every": False, "week": 1},
-        {"start": 18, "end": 20, "subject": "Etică", "room": "2/I", "every": True},
+    3: [  # Thursday
+        {"start": 14, "end": 16, "subject": "Programming Paradigms lecture", "room": "C335", "every": True},
+        {"start": 16, "end": 18, "subject": "Programming Paradigms seminar", "room": "DC402", "every": False, "week": 1},
     ],
-    3: [  # Joi
-        {"start": 8,  "end": 10, "subject": "TRSI lab", "room": "L336", "every": False, "week": 2},
-        {"start": 10, "end": 12, "subject": "TRSI curs", "room": "C335", "every": True},
-        {"start": 16, "end": 18, "subject": "OOP lab", "room": "L002", "every": True},
-        {"start": 18, "end": 20, "subject": "CVDL lab", "room": "L439", "every": False, "week": 2},
-    ],
-    4: [  # Vineri
-        {"start": 14, "end": 16, "subject": "Licență lab", "room": "L404", "every": False, "week": 1},
+    4: [  # Friday
+        {"start": 14, "end": 16, "subject": "Ethics & Research Methodology seminar", "room": "5/I", "every": False, "week": 2},
+        {"start": 16, "end": 18, "subject": "Sustainable SE lecture", "room": "C036", "every": True},
+        {"start": 18, "end": 20, "subject": "Sustainable SE seminar", "room": "L402", "every": False, "week": 1},
     ],
 }
 
@@ -126,7 +124,7 @@ def get_next_class(now=None):
 
 
 def has_class_soon(within_hours=2, now=None):
-    """Returns a string like 'TRSI curs in ~45min' or None.
+    """Returns a string like 'Agile lecture in ~45min' or None.
 
     Also flags a class already in progress if it started before
     QUIET_HOURS_END: quiet hours mean the normal "in ~Xmin" heads-up never
