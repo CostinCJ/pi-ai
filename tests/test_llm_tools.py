@@ -111,3 +111,15 @@ def test_chat_model_override(monkeypatch):
     monkeypatch.setattr(llm._client.chat.completions, "create", fake_create)
     llm.chat([{"role": "user", "content": "test"}], model="special-model")
     assert captured["model"] == "special-model"
+
+
+def test_chat_with_tools_passes_tool_choice(monkeypatch):
+    import llm
+    captured = {}
+    monkeypatch.setattr(
+        llm._client.chat.completions, "create",
+        lambda **kw: captured.update(kw) or _make_text_completion("ok")
+    )
+    forced = {"type": "function", "function": {"name": "set_reminder"}}
+    llm.chat_with_tools([{"role": "user", "content": "x"}], [], tool_choice=forced)
+    assert captured["tool_choice"] == forced

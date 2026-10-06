@@ -192,7 +192,8 @@ def chat_with_retry(messages, options=None, timeout=60, retry_hint=None, max_cha
     return second, False
 
 
-def chat_with_tools(messages, tools, options=None, timeout=60, model=None):
+def chat_with_tools(messages, tools, options=None, timeout=60, model=None,
+                    tool_choice="auto"):
     """Call Groq with function-calling tools.
 
     Returns a 4-tuple:
@@ -215,7 +216,7 @@ def chat_with_tools(messages, tools, options=None, timeout=60, model=None):
             model=model or GROQ_MODEL,
             messages=messages,
             tools=tools,
-            tool_choice="auto",
+            tool_choice=tool_choice,
             timeout=timeout,
             **kwargs,
         )

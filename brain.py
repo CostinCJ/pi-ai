@@ -1,6 +1,7 @@
 import json
 import logging
 import random
+import re
 from datetime import datetime
 import weather_sync
 import db_helpers
@@ -17,6 +18,11 @@ _log = logging.getLogger('brain')
 
 LLM_OPTIONS_CHAT = {"temperature": 0.7, "top_p": 0.8, "num_predict": 100}
 LLM_OPTIONS_THINK = {"temperature": 0.7, "top_p": 0.8, "num_predict": 80}
+MAX_TOOL_STEPS = 3
+_REMINDER_REQUEST = re.compile(
+    r"\b(remind me|ping me|remember me|set (a |up a )?reminder)\b", re.I
+)
+REMINDER_FAILED_REPLY = "couldn't save that reminder. try again with a date and time"
 
 TOOL_SCHEMAS = [
     {
@@ -43,7 +49,8 @@ TOOL_SCHEMAS = [
             "description": (
                 "Set a reminder for the user. Use when they ask to be reminded "
                 "of something at a specific time. Resolve natural language times "
-                "(e.g. 'tonight at 10') to an ISO datetime before calling."
+                "(e.g. 'tonight at 10') to an ISO datetime before calling. The current "
+                "date is in the Time line of the system prompt; never search for it."
             ),
             "parameters": {
                 "type": "object",
@@ -164,6 +171,23 @@ def _execute_tool(tool_name, tool_args):
     return f"unknown tool: {tool_name}"
 
 
+def _append_tool_turn(messages, tool_name, tool_args, tool_call_id, result):
+    messages.append({
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [{
+            "id": tool_call_id,
+            "type": "function",
+            "function": {"name": tool_name, "arguments": json.dumps(tool_args)},
+        }],
+    })
+    messages.append({
+        "role": "tool",
+        "tool_call_id": tool_call_id,
+        "content": str(result),
+    })
+
+
 def _generate_vision_reply(user_message, image_data):
     system = (
         f"{PERSONA}\n\n"
@@ -190,7 +214,7 @@ def _generate_vision_reply(user_message, image_data):
 
 
 def _generate_tool_reply(user_message):
-    current_time = datetime.now().strftime("%a %d %b, %H:%M")
+    current_time = datetime.now().strftime("%a %d %b %Y, %H:%M")
     spotify_clean = db_helpers.get_recent_spotify(limit=SPOTIFY_CONTEXT_LIMIT)
     context = _build_context_line(user_message, spotify_clean)
     classes = uni_schedule.get_todays_classes()
@@ -219,27 +243,42 @@ def _generate_tool_reply(user_message):
     messages.extend(history_messages)
     messages.append({"role": "user", "content": user_message})
 
-    text, tool_name, tool_args, tool_call_id = chat_with_tools(
-        messages, TOOL_SCHEMAS, LLM_OPTIONS_CHAT, timeout=90
-    )
-
-    if tool_name:
+    text = None
+    used_tools = False
+    reminder_saved = False
+    for _ in range(MAX_TOOL_STEPS):
+        text, tool_name, tool_args, tool_call_id = chat_with_tools(
+            messages, TOOL_SCHEMAS, LLM_OPTIONS_CHAT, timeout=90
+        )
+        if not tool_name:
+            break
+        used_tools = True
         result = _execute_tool(tool_name, tool_args)
-        messages.append({
-            "role": "assistant",
-            "content": None,
-            "tool_calls": [{
-                "id": tool_call_id,
-                "type": "function",
-                "function": {"name": tool_name, "arguments": json.dumps(tool_args)},
-            }],
-        })
-        messages.append({
-            "role": "tool",
-            "tool_call_id": tool_call_id,
-            "content": str(result),
-        })
+        if tool_name == "set_reminder" and str(result).startswith("reminder set"):
+            reminder_saved = True
+        _append_tool_turn(messages, tool_name, tool_args, tool_call_id, result)
+        text = None
+
+    is_reminder_request = bool(_REMINDER_REQUEST.search(user_message))
+    if is_reminder_request and not reminder_saved and not used_tools:
+        _, tool_name, tool_args, tool_call_id = chat_with_tools(
+            messages, TOOL_SCHEMAS, LLM_OPTIONS_CHAT, timeout=90,
+            tool_choice={"type": "function", "function": {"name": "set_reminder"}},
+        )
+        if tool_name == "set_reminder":
+            result = _execute_tool(tool_name, tool_args)
+            reminder_saved = str(result).startswith("reminder set")
+            _append_tool_turn(messages, tool_name, tool_args, tool_call_id, result)
+            used_tools = True
+            text = None
+
+    if text is None and used_tools:
         text = chat(messages, LLM_OPTIONS_CHAT, timeout=90)
+
+    # The model happily claims "got it, i'll ping you" without saving anything.
+    if is_reminder_request and not reminder_saved:
+        _log.warning(f"reminder request not saved: {user_message[:120]!r}")
+        return REMINDER_FAILED_REPLY
 
     if text and is_in_character(text, max_chars=cap):
         return text
